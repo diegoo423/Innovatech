@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { User, UserRole, GRADOS_COLEGIO, GradoColegio } from '../types';
+import { loginUser, registerNewUser, getAllUsersFromFirestore } from '../firebase';
 import { 
   GraduationCap, 
   UserCheck, 
@@ -53,8 +54,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onRegister
   // Accordion for Demo logins
   const [showDemoAcc, setShowDemoAcc] = useState(false);
 
-  // Handle Login Submit
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  // Handle Login Submit via Firebase Auth & Cloud Firestore
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
 
@@ -62,44 +63,24 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onRegister
     const passTrimmed = loginPassword.trim();
 
     if (!docTrimmed || !passTrimmed) {
-      setLoginError('Por favor ingresa tu número de documento y contraseña.');
+      setLoginError('Por favor ingresa tu número de documento o correo y contraseña.');
       return;
     }
 
     setIsLoggingIn(true);
 
-    setTimeout(() => {
-      // Find user by Document ID or by Email
-      const foundUser = users.find(
-        (u) => 
-          u.identificacion.trim() === docTrimmed || 
-          (u.correo && u.correo.trim().toLowerCase() === docTrimmed.toLowerCase())
-      );
-
-      // Validate user existence and password
-      if (!foundUser) {
-        setLoginError('Usuario o contraseña incorrectos.');
-        setIsLoggingIn(false);
-        return;
-      }
-
-      // If user has a password set, verify it
-      const expectedPassword = foundUser.password || 
-        (foundUser.rol === 'estudiante' ? 'estudiante123' : foundUser.rol === 'docente' ? 'docente123' : 'admin123');
-
-      if (expectedPassword !== passTrimmed) {
-        setLoginError('Usuario o contraseña incorrectos.');
-        setIsLoggingIn(false);
-        return;
-      }
-
-      // Successful login
+    try {
+      const authenticatedUser = await loginUser(docTrimmed, passTrimmed, users);
       setIsLoggingIn(false);
-      onLoginSuccess(foundUser);
-    }, 300);
+      onLoginSuccess(authenticatedUser);
+    } catch (err: any) {
+      console.warn('Login error:', err);
+      setIsLoggingIn(false);
+      setLoginError(err?.message || 'Usuario o contraseña incorrectos.');
+    }
   };
 
-  // Handle Register Submit
+  // Handle Register Submit via Firebase Auth & Cloud Firestore
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setRegisterError('');
@@ -146,53 +127,63 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onRegister
       return;
     }
 
-    // 5. Check if document already exists
-    const docExists = users.some((u) => u.identificacion.trim() === regDocumento.trim());
-    if (docExists) {
-      setRegisterError('El documento ya se encuentra registrado en el sistema.');
-      return;
-    }
-
-    // 6. Check if email already exists
-    const emailExists = users.some(
-      (u) => u.correo && u.correo.trim().toLowerCase() === regCorreo.trim().toLowerCase()
-    );
-    if (emailExists) {
-      setRegisterError('El correo electrónico ya se encuentra registrado.');
-      return;
-    }
-
     setIsRegistering(true);
 
     try {
+      // Check real-time cloud Firestore to prevent cross-device conflicts
+      const cloudUsers = await getAllUsersFromFirestore();
+      const currentList = cloudUsers.length > 0 ? cloudUsers : users;
+
+      const docExists = currentList.some((u) => u.identificacion?.trim() === regDocumento.trim());
+      if (docExists) {
+        setRegisterError('El documento de identidad ya se encuentra registrado en el sistema.');
+        setIsRegistering(false);
+        return;
+      }
+
+      const emailExists = currentList.some(
+        (u) => u.correo && u.correo.trim().toLowerCase() === regCorreo.trim().toLowerCase()
+      );
+      if (emailExists) {
+        setRegisterError('El correo electrónico ya se encuentra registrado en el sistema.');
+        setIsRegistering(false);
+        return;
+      }
+
+      const tempId = `usr-${Date.now()}`;
       const newUser: User = {
-        id: `usr-${Date.now()}`,
+        id: tempId,
+        uid: tempId,
         identificacion: regDocumento.trim(),
         nombre: regNombre.trim(),
         nombreCompleto: regNombre.trim(),
         correo: regCorreo.trim().toLowerCase(),
         password: regPassword.trim(),
         rol: regRol,
+        tipoUsuario: regRol,
         grado: regRol === 'estudiante' ? regGrado : undefined,
         salonId: regRol === 'estudiante' ? `salon-${regGrado.toLowerCase()}` : undefined,
         salonNombre: regRol === 'estudiante' ? regGrado : undefined,
         fechaRegistro: new Date().toISOString().split('T')[0],
+        estado: 'Activo',
+        haIniciadoSesion: false,
       };
 
-      await onRegisterUser(newUser);
+      const savedUser = await registerNewUser(newUser);
+      await onRegisterUser(savedUser);
 
-      setRegisterSuccess('Usuario registrado exitosamente. Ahora puedes iniciar sesión.');
+      setRegisterSuccess('¡Usuario registrado exitosamente en Firebase Cloud Firestore! Ahora puedes iniciar sesión.');
       setIsRegistering(false);
 
-      // Pre-fill login with new document and switch to login tab after brief pause
-      setLoginDoc(newUser.identificacion);
+      // Pre-fill login with new identifier and switch to login tab after brief pause
+      setLoginDoc(savedUser.correo || savedUser.identificacion);
       setLoginPassword(regPassword);
       setTimeout(() => {
         setViewMode('login');
-      }, 1800);
-    } catch (err) {
+      }, 1500);
+    } catch (err: any) {
       console.error('Error during registration:', err);
-      setRegisterError('Ocurrió un error al registrar el usuario. Inténtalo nuevamente.');
+      setRegisterError(err?.message || 'Ocurrió un error al registrar el usuario en Firebase.');
       setIsRegistering(false);
     }
   };

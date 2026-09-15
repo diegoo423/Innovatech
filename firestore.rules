@@ -45,15 +45,18 @@ service cloud.firestore {
     }
 
     function isValidUser(data) {
-      return data.identificacion is string && data.identificacion.size() <= 32 &&
+      return (data.identificacion == null || (data.identificacion is string && data.identificacion.size() <= 64)) &&
+             (data.uid == null || (data.uid is string && data.uid.size() <= 128)) &&
              (data.nombre is string || data.nombreCompleto is string) &&
              (data.correo is string || data.email is string) &&
-             (data.rol == 'estudiante' || data.rol == 'docente' || data.rol == 'administrador');
+             (data.rol == 'estudiante' || data.rol == 'docente' || data.rol == 'administrador' ||
+              data.tipoUsuario == 'estudiante' || data.tipoUsuario == 'docente' || data.tipoUsuario == 'administrador');
     }
 
     // Colección de Pupitres Dañados
     match /pupitres/{pupitreId} {
-      allow read: if isValidId(pupitreId);
+      allow get: if isValidId(pupitreId);
+      allow list: if true;
       allow create: if isValidId(pupitreId) && isValidDeskDamage(incoming());
       allow update: if isValidId(pupitreId) && isValidDeskDamage(incoming());
       allow delete: if isValidId(pupitreId);
@@ -61,7 +64,8 @@ service cloud.firestore {
 
     // Colección de Salones de Clase
     match /salones/{salonId} {
-      allow read: if isValidId(salonId);
+      allow get: if isValidId(salonId);
+      allow list: if true;
       allow create: if isValidId(salonId) && isValidClassroom(incoming());
       allow update: if isValidId(salonId) && isValidClassroom(incoming());
       allow delete: if isValidId(salonId);
@@ -69,7 +73,8 @@ service cloud.firestore {
 
     // Colección de Notificaciones Institucionales
     match /notificaciones/{notificacionId} {
-      allow read: if isValidId(notificacionId);
+      allow get: if isValidId(notificacionId);
+      allow list: if true;
       allow create: if isValidId(notificacionId) && isValidNotification(incoming());
       allow update: if isValidId(notificacionId) && isValidNotification(incoming());
       allow delete: if isValidId(notificacionId);
@@ -77,7 +82,8 @@ service cloud.firestore {
 
     // Colección de Usuarios
     match /usuarios/{usuarioId} {
-      allow read: if isValidId(usuarioId);
+      allow get: if isValidId(usuarioId);
+      allow list: if true;
       allow create: if isValidId(usuarioId) && isValidUser(incoming());
       allow update: if isValidId(usuarioId) && isValidUser(incoming());
       allow delete: if isValidId(usuarioId);

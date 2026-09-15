@@ -1,5 +1,10 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { 
+  getAuth, 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  signOut 
+} from 'firebase/auth';
 import { 
   getFirestore, 
   doc, 
@@ -177,31 +182,239 @@ export async function createNotificationDoc(notification: SystemNotification) {
 
 // Firestore operations for Usuarios
 export async function createUserDoc(user: User) {
-  const path = `usuarios/${user.id}`;
+  const uid = user.uid || user.id;
+  const path = `usuarios/${uid}`;
   try {
-    // Ensure both nombre and nombreCompleto are set for maximum compatibility
-    const dataToSave = {
-      ...user,
-      nombreCompleto: user.nombreCompleto || user.nombre,
-      correo: user.correo || `${user.identificacion}@perezyaldana.edu.co`,
+    const dataToSave: Record<string, any> = {
+      id: uid,
+      uid: uid,
+      identificacion: user.identificacion || '',
+      nombre: user.nombre || user.nombreCompleto || '',
+      nombreCompleto: user.nombreCompleto || user.nombre || '',
+      correo: (user.correo || '').trim().toLowerCase(),
+      tipoUsuario: user.tipoUsuario || user.rol || 'estudiante',
+      rol: user.rol || user.tipoUsuario || 'estudiante',
+      fechaRegistro: user.fechaRegistro || new Date().toISOString().split('T')[0],
+      ultimoInicioSesion: user.ultimoInicioSesion || null,
+      fechaUltimoInicio: user.fechaUltimoInicio || null,
+      horaUltimoInicio: user.horaUltimoInicio || null,
+      estado: user.estado || 'Activo',
+      haIniciadoSesion: Boolean(user.haIniciadoSesion),
     };
-    await setDoc(doc(db, 'usuarios', user.id), dataToSave);
+
+    if (user.password) {
+      dataToSave.password = user.password;
+    }
+    if (user.grado) {
+      dataToSave.grado = user.grado;
+    }
+    if (user.salonId) {
+      dataToSave.salonId = user.salonId;
+    }
+    if (user.salonNombre) {
+      dataToSave.salonNombre = user.salonNombre;
+    }
+
+    await setDoc(doc(db, 'usuarios', uid), dataToSave, { merge: true });
+    return dataToSave as unknown as User;
   } catch (error) {
+    console.error('Error creating user in Firestore:', error);
     handleFirestoreError(error, OperationType.CREATE, path);
   }
 }
 
 export async function updateUserDoc(user: User) {
-  const path = `usuarios/${user.id}`;
+  const uid = user.uid || user.id;
+  const path = `usuarios/${uid}`;
   try {
-    const dataToSave = {
-      ...user,
-      nombreCompleto: user.nombreCompleto || user.nombre,
-      correo: user.correo || `${user.identificacion}@perezyaldana.edu.co`,
+    const dataToSave: Record<string, any> = {
+      id: uid,
+      uid: uid,
+      nombre: user.nombre || user.nombreCompleto || '',
+      nombreCompleto: user.nombreCompleto || user.nombre || '',
+      correo: (user.correo || '').trim().toLowerCase(),
+      tipoUsuario: user.tipoUsuario || user.rol || 'estudiante',
+      rol: user.rol || user.tipoUsuario || 'estudiante',
       estado: user.estado || 'Activo',
+      haIniciadoSesion: Boolean(user.haIniciadoSesion),
     };
-    await setDoc(doc(db, 'usuarios', user.id), dataToSave, { merge: true });
+
+    if (user.identificacion) {
+      dataToSave.identificacion = user.identificacion;
+    }
+    if (user.ultimoInicioSesion !== undefined) {
+      dataToSave.ultimoInicioSesion = user.ultimoInicioSesion;
+    }
+    if (user.fechaUltimoInicio !== undefined) {
+      dataToSave.fechaUltimoInicio = user.fechaUltimoInicio;
+    }
+    if (user.horaUltimoInicio !== undefined) {
+      dataToSave.horaUltimoInicio = user.horaUltimoInicio;
+    }
+    if (user.password) {
+      dataToSave.password = user.password;
+    }
+    if (user.grado) {
+      dataToSave.grado = user.grado;
+    }
+
+    await setDoc(doc(db, 'usuarios', uid), dataToSave, { merge: true });
   } catch (error) {
+    console.error('Error updating user in Firestore:', error);
     handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+}
+
+// Fetch all users directly from Cloud Firestore
+export async function getAllUsersFromFirestore(): Promise<User[]> {
+  try {
+    const snap = await getDocs(collection(db, 'usuarios'));
+    const results: User[] = [];
+    snap.forEach((docSnap) => {
+      const data = docSnap.data();
+      results.push({
+        id: docSnap.id,
+        uid: data.uid || docSnap.id,
+        identificacion: data.identificacion || '',
+        nombre: data.nombre || data.nombreCompleto || 'Usuario',
+        nombreCompleto: data.nombreCompleto || data.nombre || 'Usuario',
+        correo: data.correo || '',
+        rol: data.rol || data.tipoUsuario || 'estudiante',
+        tipoUsuario: data.tipoUsuario || data.rol || 'estudiante',
+        fechaRegistro: data.fechaRegistro || '',
+        ultimoInicioSesion: data.ultimoInicioSesion || undefined,
+        fechaUltimoInicio: data.fechaUltimoInicio || undefined,
+        horaUltimoInicio: data.horaUltimoInicio || undefined,
+        estado: (data.estado as 'Activo' | 'Inactivo') || 'Activo',
+        haIniciadoSesion: Boolean(data.haIniciadoSesion || data.ultimoInicioSesion),
+        password: data.password,
+        grado: data.grado,
+        salonId: data.salonId,
+        salonNombre: data.salonNombre,
+      });
+    });
+    return results;
+  } catch (error) {
+    console.error('Error in getAllUsersFromFirestore:', error);
+    return [];
+  }
+}
+
+// Centralized registration in Firebase Auth + Cloud Firestore
+export async function registerNewUser(userParam: User): Promise<User> {
+  const email = (userParam.correo || '').trim().toLowerCase();
+  const password = userParam.password || 'estudiante123';
+  let uid = userParam.uid || userParam.id;
+
+  // 1. Attempt registration in Firebase Authentication
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, email, password);
+    uid = cred.user.uid;
+  } catch (authErr: any) {
+    if (authErr?.code === 'auth/email-already-in-use') {
+      throw new Error('El correo electrónico ya se encuentra registrado.');
+    }
+    // If auth/operation-not-allowed or not configured in console, generate secure unique UID
+    if (!uid || uid.startsWith('temp-')) {
+      uid = `usr-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+    }
+  }
+
+  // 2. Persist directly to Cloud Firestore 'usuarios' collection
+  const userRecord: User = {
+    ...userParam,
+    id: uid,
+    uid: uid,
+    correo: email,
+    tipoUsuario: userParam.rol,
+    rol: userParam.rol,
+    nombreCompleto: userParam.nombreCompleto || userParam.nombre,
+    fechaRegistro: userParam.fechaRegistro || new Date().toISOString().split('T')[0],
+    estado: 'Activo',
+    haIniciadoSesion: false,
+  };
+
+  await createUserDoc(userRecord);
+  return userRecord;
+}
+
+// Centralized login with Firebase Auth & Cloud Firestore
+export async function loginUser(
+  identifier: string,
+  passwordInput: string,
+  cachedUsers?: User[]
+): Promise<User> {
+  const cleanId = identifier.trim();
+  const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanId);
+  const now = new Date();
+  const fechaHoy = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+  const horaHoy = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+  // 1. Try Firebase Auth sign-in if identifier is an email
+  if (isEmail) {
+    try {
+      await signInWithEmailAndPassword(auth, cleanId.toLowerCase(), passwordInput);
+    } catch {
+      // Allow fallback to Firestore credentials check
+    }
+  }
+
+  // 2. Fetch fresh users directly from Cloud Firestore to guarantee cross-device accuracy
+  let cloudUsers: User[] = [];
+  try {
+    cloudUsers = await getAllUsersFromFirestore();
+  } catch (e) {
+    console.warn('Could not fetch cloud users, falling back to cache:', e);
+    cloudUsers = cachedUsers || [];
+  }
+
+  // 3. Find user by email or identification
+  const found = cloudUsers.find(
+    (u) =>
+      (u.correo && u.correo.toLowerCase() === cleanId.toLowerCase()) ||
+      (u.identificacion && u.identificacion.trim() === cleanId) ||
+      u.id === cleanId ||
+      u.uid === cleanId
+  );
+
+  if (!found) {
+    throw new Error('Usuario o correo no encontrado en el sistema.');
+  }
+
+  if (found.estado === 'Inactivo') {
+    throw new Error('Esta cuenta de usuario ha sido desactivada. Por favor contacta al administrador.');
+  }
+
+  // Verify password
+  const expectedPassword = found.password || 
+    (found.rol === 'estudiante' ? 'estudiante123' : found.rol === 'docente' ? 'docente123' : 'admin123');
+
+  if (expectedPassword && expectedPassword !== passwordInput.trim()) {
+    throw new Error('Contraseña incorrecta. Por favor intenta nuevamente.');
+  }
+
+  const updatedUser: User = {
+    ...found,
+    ultimoInicioSesion: now.toISOString(),
+    fechaUltimoInicio: fechaHoy,
+    horaUltimoInicio: horaHoy,
+    haIniciadoSesion: true,
+  };
+
+  // 4. Update Firestore in the cloud
+  try {
+    await updateUserDoc(updatedUser);
+  } catch (e) {
+    console.warn('Error updating login timestamp in Firestore:', e);
+  }
+
+  return updatedUser;
+}
+
+export async function firebaseLogout() {
+  try {
+    await signOut(auth);
+  } catch {
+    // ignore
   }
 }

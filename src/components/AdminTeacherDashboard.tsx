@@ -433,13 +433,21 @@ export const AdminTeacherDashboard: React.FC<AdminTeacherDashboardProps> = ({
         {/* Metric 6: NUEVA TARJETA: USUARIOS REGISTRADOS */}
         <div 
           id="card-usuarios-registrados"
-          onClick={() => setActiveDashboardView('usuarios')}
-          className={`bg-white p-4 rounded-2xl border transition-all cursor-pointer ${
+          onClick={() => {
+            if (user.rol === 'administrador') {
+              setActiveDashboardView('usuarios');
+            }
+          }}
+          className={`bg-white p-4 rounded-2xl border transition-all ${
+            user.rol === 'administrador' ? 'cursor-pointer' : 'cursor-default'
+          } ${
             activeDashboardView === 'usuarios' 
               ? 'border-emerald-500 ring-2 ring-emerald-200 bg-emerald-50/20' 
-              : 'border-blue-200 hover:border-blue-400 hover:shadow-md'
+              : user.rol === 'administrador' 
+              ? 'border-blue-200 hover:border-blue-400 hover:shadow-md' 
+              : 'border-blue-100'
           } shadow-sm flex items-center justify-between group`}
-          title="Ver registro de usuarios e inicios de sesión"
+          title={user.rol === 'administrador' ? 'Ver registro de usuarios e inicios de sesión (Administrador)' : 'Total de usuarios registrados'}
         >
           <div>
             <span className="text-[11px] font-extrabold text-blue-700 uppercase tracking-wider block">
@@ -455,7 +463,7 @@ export const AdminTeacherDashboard: React.FC<AdminTeacherDashboardProps> = ({
               {totalUsuariosConSesion} con sesión iniciada
             </span>
           </div>
-          <div className="w-10 h-10 bg-blue-50 text-blue-700 group-hover:bg-blue-600 group-hover:text-white rounded-xl flex items-center justify-center font-bold transition-colors">
+          <div className={`w-10 h-10 ${user.rol === 'administrador' ? 'bg-blue-50 text-blue-700 group-hover:bg-blue-600 group-hover:text-white' : 'bg-blue-50 text-blue-700'} rounded-xl flex items-center justify-center font-bold transition-colors`}>
             <Users className="w-5 h-5" />
           </div>
         </div>
@@ -478,18 +486,20 @@ export const AdminTeacherDashboard: React.FC<AdminTeacherDashboardProps> = ({
             <span>Listado de Pupitres ({filteredDamages.length})</span>
           </button>
 
-          <button
-            id="tab-view-usuarios"
-            onClick={() => setActiveDashboardView('usuarios')}
-            className={`flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
-              activeDashboardView === 'usuarios'
-                ? 'bg-verde-oscuro text-verde-neon shadow-sm'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-            }`}
-          >
-            <Users className="w-4 h-4" />
-            <span>Registro de Usuarios & Inicios de Sesión ({filteredUsers.length})</span>
-          </button>
+          {user.rol === 'administrador' && (
+            <button
+              id="tab-view-usuarios"
+              onClick={() => setActiveDashboardView('usuarios')}
+              className={`flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                activeDashboardView === 'usuarios'
+                  ? 'bg-verde-oscuro text-verde-neon shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              <span>Registro de Usuarios & Inicios de Sesión ({filteredUsers.length})</span>
+            </button>
+          )}
         </div>
 
         <div className="flex items-center justify-between sm:justify-end gap-2 px-2 text-[11px] text-slate-500 font-medium">
@@ -497,7 +507,7 @@ export const AdminTeacherDashboard: React.FC<AdminTeacherDashboardProps> = ({
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
             <span>Firestore Sincronizado</span>
           </span>
-          {activeDashboardView === 'usuarios' && (
+          {activeDashboardView === 'usuarios' && user.rol === 'administrador' && (
             <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded-md font-bold text-[10px]">
               {filteredUsers.length} de {users.length} usuarios
             </span>
@@ -730,9 +740,9 @@ export const AdminTeacherDashboard: React.FC<AdminTeacherDashboardProps> = ({
   )}
 
       {/* ========================================================================= */}
-      {/* VIEW 2: REGISTRO DE USUARIOS & INICIOS DE SESIÓN (SOLICITADO POR USUARIO) */}
+      {/* VIEW 2: REGISTRO DE USUARIOS & INICIOS DE SESIÓN (SOLO ADMINISTRADOR)      */}
       {/* ========================================================================= */}
-      {activeDashboardView === 'usuarios' && (
+      {activeDashboardView === 'usuarios' && user.rol === 'administrador' && (
         <div className="space-y-4">
           
           {/* User Registry Search & Filters Bar */}

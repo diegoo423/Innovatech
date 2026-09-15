@@ -38,6 +38,8 @@ import {
   createNotificationDoc,
   createUserDoc,
   updateUserDoc,
+  getAllUsersFromFirestore,
+  firebaseLogout,
   handleFirestoreError,
   OperationType
 } from './firebase';
@@ -46,16 +48,23 @@ import { collection, onSnapshot } from 'firebase/firestore';
 export default function App() {
   const [firebaseConnected, setFirebaseConnected] = useState<boolean>(true);
 
-  // State initialization with localStorage persistence
+  // State initialization with localStorage persistence for session only
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     const saved = localStorage.getItem('innovatech_user');
     return saved ? JSON.parse(saved) : null;
   });
 
-  const [users, setUsers] = useState<User[]>(() => {
-    const saved = localStorage.getItem('innovatech_users_list');
-    return saved ? JSON.parse(saved) : initialUsers;
-  });
+  // Users are strictly loaded and synchronized from Cloud Firestore across all devices
+  const [users, setUsers] = useState<User[]>([]);
+
+  // Purge any old local storage users list
+  useEffect(() => {
+    try {
+      localStorage.removeItem('innovatech_users_list');
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const [damages, setDamages] = useState<DeskDamage[]>(() => {
     const saved = localStorage.getItem('innovatech_damages');
@@ -88,6 +97,16 @@ export default function App() {
       if (isOnline) {
         await seedInitialDataIfEmpty();
 
+        // Immediately fetch all cloud users from Firestore
+        try {
+          const freshCloudUsers = await getAllUsersFromFirestore();
+          if (freshCloudUsers && freshCloudUsers.length > 0) {
+            setUsers(freshCloudUsers);
+          }
+        } catch (e) {
+          console.warn('Initial cloud users fetch notice:', e);
+        }
+
         // 1. Listen to Pupitres in real-time
         try {
           unsubscribePupitres = onSnapshot(
@@ -103,7 +122,6 @@ export default function App() {
             },
             (error) => {
               console.error('Pupitres snapshot error:', error);
-              handleFirestoreError(error, OperationType.GET, 'pupitres');
             }
           );
         } catch (e) {
@@ -125,7 +143,6 @@ export default function App() {
             },
             (error) => {
               console.error('Salones snapshot error:', error);
-              handleFirestoreError(error, OperationType.GET, 'salones');
             }
           );
         } catch (e) {
@@ -147,34 +164,56 @@ export default function App() {
             },
             (error) => {
               console.error('Notificaciones snapshot error:', error);
-              handleFirestoreError(error, OperationType.GET, 'notificaciones');
             }
           );
         } catch (e) {
           console.warn('Could not attach notificaciones listener:', e);
         }
 
-        // 4. Listen to Users in real-time
+        // 4. Listen to Users in real-time across ALL devices
         try {
           unsubscribeUsers = onSnapshot(
             collection(db, 'usuarios'),
             (snapshot) => {
-              if (!snapshot.empty) {
-                const loaded: User[] = [];
-                snapshot.forEach((docSnap) => {
-                  loaded.push(docSnap.data() as User);
-                });
+              const loaded: User[] = [];
+              snapshot.forEach((docSnap) => {
+                const d = docSnap.data();
+                loaded.push({
+                  ...d,
+                  id: docSnap.id,
+                  uid: d.uid || docSnap.id,
+                  identificacion: d.identificacion || '',
+                  nombre: d.nombre || d.nombreCompleto || 'Usuario',
+                  nombreCompleto: d.nombreCompleto || d.nombre || 'Usuario',
+                  correo: d.correo || '',
+                  rol: d.rol || d.tipoUsuario || 'estudiante',
+                  tipoUsuario: d.tipoUsuario || d.rol || 'estudiante',
+                  fechaRegistro: d.fechaRegistro || '',
+                  ultimoInicioSesion: d.ultimoInicioSesion || undefined,
+                  fechaUltimoInicio: d.fechaUltimoInicio || undefined,
+                  horaUltimoInicio: d.horaUltimoInicio || undefined,
+                  estado: (d.estado as 'Activo' | 'Inactivo') || 'Activo',
+                  haIniciadoSesion: Boolean(d.haIniciadoSesion || d.ultimoInicioSesion),
+                  password: d.password,
+                  grado: d.grado,
+                  salonId: d.salonId,
+                  salonNombre: d.salonNombre,
+                } as User);
+              });
+              if (loaded.length > 0) {
                 setUsers(loaded);
               }
             },
             (error) => {
-              console.error('Usuarios snapshot error:', error);
-              handleFirestoreError(error, OperationType.GET, 'usuarios');
+              console.warn('Usuarios snapshot listener notice:', error);
             }
           );
         } catch (e) {
           console.warn('Could not attach usuarios listener:', e);
         }
+      } else {
+        // Offline fallback to initial seed
+        setUsers(initialUsers);
       }
     }
 
@@ -209,10 +248,6 @@ export default function App() {
     localStorage.setItem('innovatech_notifications', JSON.stringify(notifications));
   }, [notifications]);
 
-  useEffect(() => {
-    localStorage.setItem('innovatech_users_list', JSON.stringify(users));
-  }, [users]);
-
   // Auth Handlers
   const handleLoginSuccess = async (userLoggedIn: User) => {
     const now = new Date();
@@ -240,9 +275,9 @@ export default function App() {
     setCurrentUser(updatedUser);
     setActiveTab('dashboard');
 
-    // Update in memory and localStorage list
+    // Update state
     setUsers((prev) =>
-      prev.map((u) => (u.id === updatedUser.id ? updatedUser : u))
+      prev.map((u) => (u.id === updatedUser.id || u.uid === updatedUser.uid ? updatedUser : u))
     );
 
     // Persist login timestamp in Firebase Cloud Firestore
@@ -254,8 +289,8 @@ export default function App() {
   };
 
   const handleUpdateUser = async (updatedUser: User) => {
-    setUsers((prev) => prev.map((u) => (u.id === updatedUser.id ? updatedUser : u)));
-    if (currentUser && currentUser.id === updatedUser.id) {
+    setUsers((prev) => prev.map((u) => (u.id === updatedUser.id || u.uid === updatedUser.uid ? updatedUser : u)));
+    if (currentUser && (currentUser.id === updatedUser.id || currentUser.uid === updatedUser.uid)) {
       setCurrentUser(updatedUser);
     }
     try {
@@ -265,8 +300,10 @@ export default function App() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setCurrentUser(null);
+    localStorage.removeItem('innovatech_user');
+    await firebaseLogout();
   };
 
   const handleSwitchUser = (userId: string) => {
@@ -335,8 +372,14 @@ export default function App() {
   };
 
   const handleRegisterUser = async (newUser: User) => {
-    // Update local state immediately
-    setUsers((prev) => [newUser, ...prev]);
+    // Update local state immediately without duplication
+    setUsers((prev) => {
+      const exists = prev.some((u) => u.id === newUser.id || u.uid === newUser.uid);
+      if (exists) {
+        return prev.map((u) => (u.id === newUser.id || u.uid === newUser.uid ? newUser : u));
+      }
+      return [newUser, ...prev];
+    });
 
     // Persist in Firebase Cloud Firestore
     try {

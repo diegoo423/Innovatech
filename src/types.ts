@@ -25,6 +25,7 @@ export type TipoDano = typeof TIPOS_DANO[number];
 
 export interface User {
   id: string;
+  uid?: string; // UID de Firebase Auth / Firestore
   identificacion: string; // Documento (Estudiante) o Cédula (Docente/Admin)
   nombre: string;
   nombreCompleto?: string;
@@ -32,6 +33,7 @@ export interface User {
   password?: string;
   passwordHash?: string;
   rol: UserRole;
+  tipoUsuario?: UserRole; // Requisito directo: tipoUsuario ('estudiante' | 'docente' | 'administrador')
   salonId?: string; // e.g. "salon-11-1"
   salonNombre?: string; // e.g. "11-1" o "Salón 11-1"
   grado?: string; // e.g. "11-1"

@@ -130,10 +130,20 @@
       "description": "Usuario del sistema escolar (Estudiante, Docente o Administrador)",
       "type": "object",
       "properties": {
+        "uid": {
+          "type": "string",
+          "description": "UID único del usuario (Firebase Auth o ID central)",
+          "maxLength": 128
+        },
         "identificacion": {
           "type": "string",
           "description": "Número de cédula o tarjeta de identidad",
-          "maxLength": 32
+          "maxLength": 64
+        },
+        "nombre": {
+          "type": "string",
+          "description": "Nombre del usuario",
+          "maxLength": 128
         },
         "nombreCompleto": {
           "type": "string",
@@ -145,10 +155,30 @@
           "description": "Correo electrónico institucional o personal",
           "maxLength": 128
         },
+        "tipoUsuario": {
+          "type": "string",
+          "description": "Tipo de usuario",
+          "enum": ["estudiante", "docente", "administrador"]
+        },
         "rol": {
           "type": "string",
           "description": "Rol de usuario",
           "enum": ["estudiante", "docente", "administrador"]
+        },
+        "fechaRegistro": {
+          "type": "string",
+          "description": "Fecha de registro del usuario en la plataforma",
+          "maxLength": 32
+        },
+        "ultimoInicioSesion": {
+          "type": "string",
+          "description": "Marca de tiempo del último inicio de sesión",
+          "maxLength": 64
+        },
+        "estado": {
+          "type": "string",
+          "description": "Estado de la cuenta",
+          "enum": ["Activo", "Inactivo"]
         },
         "salonId": {
           "type": "string",
@@ -161,7 +191,7 @@
           "maxLength": 128
         }
       },
-      "required": ["identificacion", "nombreCompleto", "correo", "rol"]
+      "required": ["nombre", "correo", "rol"]
     }
   },
   "firestore": {
