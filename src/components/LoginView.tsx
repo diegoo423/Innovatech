@@ -32,7 +32,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onRegister
   const [viewMode, setViewMode] = useState<'login' | 'register'>('login');
 
   // Login Form State
-  const [loginDoc, setLoginDoc] = useState('');
+  const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [loginError, setLoginError] = useState('');
@@ -54,33 +54,65 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onRegister
   // Accordion for Demo logins
   const [showDemoAcc, setShowDemoAcc] = useState(false);
 
-  // Handle Login Submit via Firebase Auth & Cloud Firestore
+  // Handle Login Submit strictly via Firebase Authentication
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
 
-    const docTrimmed = loginDoc.trim();
+    const emailTrimmed = loginEmail.trim().toLowerCase();
     const passTrimmed = loginPassword.trim();
 
-    if (!docTrimmed || !passTrimmed) {
-      setLoginError('Por favor ingresa tu número de documento o correo y contraseña.');
+    if (!emailTrimmed) {
+      setLoginError('Por favor ingresa tu correo electrónico.');
+      return;
+    }
+
+    // Validar formato de correo electrónico
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(emailTrimmed)) {
+      setLoginError('Por favor ingresa un correo electrónico válido (ej. usuario@perezyaldana.edu.co).');
+      return;
+    }
+
+    if (!passTrimmed) {
+      setLoginError('Por favor ingresa tu contraseña.');
       return;
     }
 
     setIsLoggingIn(true);
 
     try {
-      const authenticatedUser = await loginUser(docTrimmed, passTrimmed, users);
+      const authenticatedUser = await loginUser(emailTrimmed, passTrimmed);
       setIsLoggingIn(false);
       onLoginSuccess(authenticatedUser);
     } catch (err: any) {
-      console.warn('Login error:', err);
+      console.error('Error de Firebase Authentication en inicio de sesión:', err);
       setIsLoggingIn(false);
-      setLoginError(err?.message || 'Usuario o contraseña incorrectos.');
+
+      const errorCode = err?.code || '';
+      if (errorCode === 'auth/user-not-found') {
+        setLoginError('Este correo no está registrado.');
+      } else if (
+        errorCode === 'auth/wrong-password' || 
+        errorCode === 'auth/invalid-credential' ||
+        errorCode === 'auth/invalid-login-credentials'
+      ) {
+        setLoginError('El correo electrónico o la contraseña son incorrectos.');
+      } else if (errorCode === 'auth/invalid-email') {
+        setLoginError('El formato del correo electrónico no es válido.');
+      } else if (errorCode === 'auth/user-disabled') {
+        setLoginError('Esta cuenta de usuario ha sido desactivada por la institución.');
+      } else if (errorCode === 'auth/too-many-requests') {
+        setLoginError('Demasiados intentos fallidos. Por favor espera un momento e intenta de nuevo.');
+      } else if (errorCode === 'auth/operation-not-allowed') {
+        setLoginError('El proveedor de inicio de sesión con Correo/Contraseña no está habilitado en Firebase Authentication. Debe habilitarse en la consola de Firebase.');
+      } else {
+        setLoginError(err?.message || 'El correo electrónico o la contraseña son incorrectos.');
+      }
     }
   };
 
-  // Handle Register Submit via Firebase Auth & Cloud Firestore
+  // Handle Register Submit via Firebase Authentication & Cloud Firestore
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setRegisterError('');
@@ -117,7 +149,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onRegister
 
     // 3. Password length
     if (regPassword.trim().length < 6) {
-      setRegisterError('La contraseña debe tener una longitud mínima segura de 6 caracteres.');
+      setRegisterError('La contraseña debe tener una longitud mínima de 6 caracteres.');
       return;
     }
 
@@ -130,30 +162,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onRegister
     setIsRegistering(true);
 
     try {
-      // Check real-time cloud Firestore to prevent cross-device conflicts
-      const cloudUsers = await getAllUsersFromFirestore();
-      const currentList = cloudUsers.length > 0 ? cloudUsers : users;
-
-      const docExists = currentList.some((u) => u.identificacion?.trim() === regDocumento.trim());
-      if (docExists) {
-        setRegisterError('El documento de identidad ya se encuentra registrado en el sistema.');
-        setIsRegistering(false);
-        return;
-      }
-
-      const emailExists = currentList.some(
-        (u) => u.correo && u.correo.trim().toLowerCase() === regCorreo.trim().toLowerCase()
-      );
-      if (emailExists) {
-        setRegisterError('El correo electrónico ya se encuentra registrado en el sistema.');
-        setIsRegistering(false);
-        return;
-      }
-
-      const tempId = `usr-${Date.now()}`;
       const newUser: User = {
-        id: tempId,
-        uid: tempId,
+        id: '',
         identificacion: regDocumento.trim(),
         nombre: regNombre.trim(),
         nombreCompleto: regNombre.trim(),
@@ -172,19 +182,30 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onRegister
       const savedUser = await registerNewUser(newUser);
       await onRegisterUser(savedUser);
 
-      setRegisterSuccess('¡Usuario registrado exitosamente en Firebase Cloud Firestore! Ahora puedes iniciar sesión.');
+      setRegisterSuccess('¡Cuenta creada exitosamente en Firebase Authentication! Redirigiendo al inicio de sesión...');
       setIsRegistering(false);
 
-      // Pre-fill login with new identifier and switch to login tab after brief pause
-      setLoginDoc(savedUser.correo || savedUser.identificacion);
+      // Pre-fill email and password in login form and switch to login
+      setLoginEmail(savedUser.correo);
       setLoginPassword(regPassword);
       setTimeout(() => {
         setViewMode('login');
-      }, 1500);
+      }, 1200);
     } catch (err: any) {
-      console.error('Error during registration:', err);
-      setRegisterError(err?.message || 'Ocurrió un error al registrar el usuario en Firebase.');
+      console.error('Error de Firebase Authentication en registro:', err);
       setIsRegistering(false);
+      const errorCode = err?.code || '';
+      if (errorCode === 'auth/email-already-in-use') {
+        setRegisterError('El correo electrónico ya se encuentra registrado.');
+      } else if (errorCode === 'auth/invalid-email') {
+        setRegisterError('El formato del correo electrónico no es válido.');
+      } else if (errorCode === 'auth/weak-password') {
+        setRegisterError('La contraseña debe tener al menos 6 caracteres.');
+      } else if (errorCode === 'auth/operation-not-allowed') {
+        setRegisterError('El proveedor de inicio de sesión con Correo/Contraseña no está habilitado en Firebase Authentication. Debe habilitarse en la consola de Firebase.');
+      } else {
+        setRegisterError(err?.message || 'Ocurrió un error al registrar la cuenta en Firebase.');
+      }
     }
   };
 
@@ -192,13 +213,13 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onRegister
   const fillDemoAccount = (role: 'estudiante' | 'docente' | 'administrador') => {
     setViewMode('login');
     if (role === 'estudiante') {
-      setLoginDoc('1001234567');
+      setLoginEmail('juan.perez@perezyaldana.edu.co');
       setLoginPassword('estudiante123');
     } else if (role === 'docente') {
-      setLoginDoc('52123456');
+      setLoginEmail('carlos.mendoza@perezyaldana.edu.co');
       setLoginPassword('docente123');
     } else {
-      setLoginDoc('10101010');
+      setLoginEmail('administracion@perezyaldana.edu.co');
       setLoginPassword('admin123');
     }
     setLoginError('');
@@ -227,7 +248,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onRegister
               <span>Funcionalidades Integradas:</span>
             </div>
             <ul className="text-slate-600 space-y-1 pl-5 list-disc text-[11px]">
-              <li>Autenticación por Documento y Contraseña</li>
+              <li>Autenticación por Correo Electrónico y Contraseña</li>
               <li>Registro de Estudiantes (Grados 6-1 a 11-4)</li>
               <li>Perfiles de Docentes y Administración</li>
               <li>Base de datos en la nube con Firebase Firestore</li>
@@ -323,39 +344,37 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onRegister
 
             <form onSubmit={handleLoginSubmit} className="space-y-4">
               
-              {/* Document / User Input */}
+              {/* CORREO ELECTRÓNICO */}
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-gray-200 mb-1.5 flex items-center gap-1.5">
-                  <IdCard className="w-4 h-4 text-verde-neon" />
-                  <span>Número de Documento o Usuario</span>
+                  <Mail className="w-4 h-4 text-verde-neon" />
+                  <span>CORREO ELECTRÓNICO</span>
                 </label>
                 
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                    <IdCard className="w-5 h-5" />
+                    <Mail className="w-5 h-5" />
                   </div>
                   <input
-                    type="text"
-                    value={loginDoc}
+                    type="email"
+                    value={loginEmail}
                     onChange={(e) => {
-                      setLoginDoc(e.target.value);
+                      setLoginEmail(e.target.value);
                       setLoginError('');
                     }}
-                    placeholder="Ej: 1001234567 o correo@colegio.edu.co"
-                    className="w-full pl-11 pr-4 py-3 bg-black/40 text-white rounded-xl text-sm border-2 border-white/20 focus:border-verde-neon outline-none transition-all placeholder:text-gray-500 font-mono"
+                    placeholder="Ingresa tu correo electrónico"
+                    className="w-full pl-11 pr-4 py-3 bg-black/40 text-white rounded-xl text-sm border-2 border-white/20 focus:border-verde-neon outline-none transition-all placeholder:text-gray-500"
                     required
                   />
                 </div>
-                <p className="text-[11px] text-gray-400 mt-1">
-                  Ingresa tu documento de identidad (TI/CC) o correo registrado.
-                </p>
               </div>
 
-              {/* Password Input */}
+              {/* CONTRASEÑA */}
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-gray-200 mb-1.5 flex items-center justify-between">
                   <span className="flex items-center gap-1.5">
-                    <Lock className="w-4 h-4 text-verde-neon" /> Contraseña
+                    <Lock className="w-4 h-4 text-verde-neon" />
+                    <span>CONTRASEÑA</span>
                   </span>
                 </label>
 
@@ -370,7 +389,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onRegister
                       setLoginPassword(e.target.value);
                       setLoginError('');
                     }}
-                    placeholder="••••••••"
+                    placeholder="Ingresa tu contraseña"
                     className="w-full pl-11 pr-11 py-3 bg-black/40 text-white rounded-xl text-sm border-2 border-white/20 focus:border-verde-neon outline-none transition-all placeholder:text-gray-500"
                     required
                   />
@@ -383,30 +402,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onRegister
                     {showLoginPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                 </div>
-              </div>
-
-              {/* Toggle Password visibility */}
-              <div className="flex items-center justify-between text-xs pt-1">
-                <label className="flex items-center space-x-2 cursor-pointer select-none text-gray-300 hover:text-white transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={showLoginPassword}
-                    onChange={(e) => setShowLoginPassword(e.target.checked)}
-                    className="w-4 h-4 rounded bg-black/50 border-white/30 text-verde-neon focus:ring-verde-neon focus:ring-offset-0 cursor-pointer"
-                  />
-                  <span>Mostrar Contraseña</span>
-                </label>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setViewMode('register');
-                    setLoginError('');
-                  }}
-                  className="text-verde-neon hover:underline font-semibold text-xs"
-                >
-                  ¿No tienes cuenta? Regístrate
-                </button>
               </div>
 
               {/* Submit Button */}
@@ -426,21 +421,23 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onRegister
                   </span>
                 )}
               </button>
-            </form>
 
-            {/* Quick Link to Register */}
-            <div className="text-center pt-2">
-              <p className="text-xs text-gray-300">
-                ¿Eres un estudiante nuevo o docente?{' '}
+              {/* ¿No tienes cuenta? Regístrate aquí */}
+              <div className="text-center pt-2">
                 <button
                   type="button"
-                  onClick={() => setViewMode('register')}
-                  className="text-verde-neon font-bold hover:underline"
+                  onClick={() => {
+                    setViewMode('register');
+                    setLoginError('');
+                    setRegisterError('');
+                  }}
+                  className="text-verde-neon font-bold text-xs hover:underline cursor-pointer"
                 >
-                  Crear una nueva cuenta aquí
+                  ¿No tienes cuenta? Regístrate aquí
                 </button>
-              </p>
-            </div>
+              </div>
+
+            </form>
 
           </div>
         )}
@@ -671,30 +668,30 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onRegister
               <button
                 type="button"
                 onClick={() => fillDemoAccount('estudiante')}
-                className="px-2 py-2 bg-sky-950/80 hover:bg-sky-800 text-sky-200 rounded-lg text-[10px] font-medium border border-sky-500/30 transition-all text-center"
+                className="px-2 py-2 bg-sky-950/80 hover:bg-sky-800 text-sky-200 rounded-lg text-[10px] font-medium border border-sky-500/30 transition-all text-center cursor-pointer"
               >
                 <div className="font-bold text-xs">Estudiante</div>
-                <div className="text-[9px] text-gray-300">1001234567</div>
+                <div className="text-[9px] text-gray-300 truncate" title="juan.perez@perezyaldana.edu.co">juan.perez@...</div>
                 <div className="text-[8px] text-sky-400">Grado 11-1</div>
               </button>
 
               <button
                 type="button"
                 onClick={() => fillDemoAccount('docente')}
-                className="px-2 py-2 bg-emerald-950/80 hover:bg-emerald-800 text-emerald-200 rounded-lg text-[10px] font-medium border border-emerald-500/30 transition-all text-center"
+                className="px-2 py-2 bg-emerald-950/80 hover:bg-emerald-800 text-emerald-200 rounded-lg text-[10px] font-medium border border-emerald-500/30 transition-all text-center cursor-pointer"
               >
                 <div className="font-bold text-xs">Docente</div>
-                <div className="text-[9px] text-gray-300">52123456</div>
+                <div className="text-[9px] text-gray-300 truncate" title="carlos.mendoza@perezyaldana.edu.co">carlos.mendoza@...</div>
                 <div className="text-[8px] text-emerald-400">Prof. Mendoza</div>
               </button>
 
               <button
                 type="button"
                 onClick={() => fillDemoAccount('administrador')}
-                className="px-2 py-2 bg-purple-950/80 hover:bg-purple-800 text-purple-200 rounded-lg text-[10px] font-medium border border-purple-500/30 transition-all text-center"
+                className="px-2 py-2 bg-purple-950/80 hover:bg-purple-800 text-purple-200 rounded-lg text-[10px] font-medium border border-purple-500/30 transition-all text-center cursor-pointer"
               >
                 <div className="font-bold text-xs">Admin</div>
-                <div className="text-[9px] text-gray-300">10101010</div>
+                <div className="text-[9px] text-gray-300 truncate" title="administracion@perezyaldana.edu.co">administracion@...</div>
                 <div className="text-[8px] text-purple-400">Dra. Elena</div>
               </button>
             </div>

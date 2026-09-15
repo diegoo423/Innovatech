@@ -3,18 +3,22 @@ import {
   getAuth, 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
-  signOut 
+  signOut,
+  onAuthStateChanged
 } from 'firebase/auth';
 import { 
   getFirestore, 
   doc, 
+  getDoc,
   getDocFromServer,
   collection,
   getDocs,
   setDoc,
   updateDoc,
   deleteDoc,
-  onSnapshot
+  onSnapshot,
+  query,
+  where
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 import { DeskDamage, Classroom, SystemNotification, User } from './types';
@@ -300,27 +304,20 @@ export async function getAllUsersFromFirestore(): Promise<User[]> {
   }
 }
 
-// Centralized registration in Firebase Auth + Cloud Firestore
+// Centralized registration in Firebase Authentication + Cloud Firestore
 export async function registerNewUser(userParam: User): Promise<User> {
   const email = (userParam.correo || '').trim().toLowerCase();
-  const password = userParam.password || 'estudiante123';
-  let uid = userParam.uid || userParam.id;
+  const password = userParam.password || '';
 
-  // 1. Attempt registration in Firebase Authentication
-  try {
-    const cred = await createUserWithEmailAndPassword(auth, email, password);
-    uid = cred.user.uid;
-  } catch (authErr: any) {
-    if (authErr?.code === 'auth/email-already-in-use') {
-      throw new Error('El correo electrónico ya se encuentra registrado.');
-    }
-    // If auth/operation-not-allowed or not configured in console, generate secure unique UID
-    if (!uid || uid.startsWith('temp-')) {
-      uid = `usr-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-    }
+  if (!email || !password) {
+    throw new Error('El correo electrónico y la contraseña son requeridos.');
   }
 
-  // 2. Persist directly to Cloud Firestore 'usuarios' collection
+  // 1. Create account strictly in Firebase Authentication
+  const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+  const uid = userCredential.user.uid;
+
+  // 2. Persist profile document in Cloud Firestore under 'usuarios' collection
   const userRecord: User = {
     ...userParam,
     id: uid,
@@ -328,84 +325,102 @@ export async function registerNewUser(userParam: User): Promise<User> {
     correo: email,
     tipoUsuario: userParam.rol,
     rol: userParam.rol,
-    nombreCompleto: userParam.nombreCompleto || userParam.nombre,
+    nombre: userParam.nombre.trim(),
+    nombreCompleto: (userParam.nombreCompleto || userParam.nombre).trim(),
     fechaRegistro: userParam.fechaRegistro || new Date().toISOString().split('T')[0],
     estado: 'Activo',
     haIniciadoSesion: false,
   };
 
+  // Remove plaintext password before storing in Firestore
+  delete userRecord.password;
+
   await createUserDoc(userRecord);
   return userRecord;
 }
 
-// Centralized login with Firebase Auth & Cloud Firestore
+// Centralized login strictly using Firebase Authentication signInWithEmailAndPassword
 export async function loginUser(
-  identifier: string,
-  passwordInput: string,
-  cachedUsers?: User[]
+  emailInput: string,
+  passwordInput: string
 ): Promise<User> {
-  const cleanId = identifier.trim();
-  const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanId);
+  const cleanEmail = emailInput.trim().toLowerCase();
+  const cleanPassword = passwordInput.trim();
+
+  if (!cleanEmail || !cleanPassword) {
+    throw new Error('Por favor ingresa tu correo electrónico y contraseña.');
+  }
+
+  // 1. Authenticate strictly against Firebase Authentication
+  const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
+  const fbUser = userCredential.user;
+  const uid = fbUser.uid;
+
+  // 2. Retrieve user profile from Cloud Firestore
+  let userProfile: User | null = null;
+  try {
+    const userDocRef = doc(db, 'usuarios', uid);
+    const userDocSnap = await getDoc(userDocRef);
+    if (userDocSnap.exists()) {
+      userProfile = { ...(userDocSnap.data() as User), id: uid, uid };
+    }
+  } catch (err) {
+    console.warn('Notice loading user by UID from Firestore:', err);
+  }
+
+  // Fallback: match by email in Firestore if the document was previously created with another ID
+  if (!userProfile) {
+    try {
+      const q = query(collection(db, 'usuarios'), where('correo', '==', cleanEmail));
+      const qSnap = await getDocs(q);
+      if (!qSnap.empty) {
+        const d = qSnap.docs[0];
+        userProfile = { ...(d.data() as User), id: d.id, uid };
+      }
+    } catch (err) {
+      console.warn('Notice loading user by email query from Firestore:', err);
+    }
+  }
+
+  // If no document exists yet, bootstrap profile from Firebase Auth data
+  if (!userProfile) {
+    userProfile = {
+      id: uid,
+      uid: uid,
+      identificacion: '',
+      nombre: fbUser.displayName || cleanEmail.split('@')[0],
+      nombreCompleto: fbUser.displayName || cleanEmail.split('@')[0],
+      correo: cleanEmail,
+      rol: 'estudiante',
+      tipoUsuario: 'estudiante',
+      fechaRegistro: new Date().toISOString().split('T')[0],
+      estado: 'Activo',
+      haIniciadoSesion: true,
+    };
+  }
+
+  if (userProfile.estado === 'Inactivo') {
+    await signOut(auth);
+    throw new Error('Esta cuenta de usuario ha sido desactivada por la institución.');
+  }
+
+  // 3. Register the session in Cloud Firestore so it updates the registered users table
   const now = new Date();
   const fechaHoy = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
   const horaHoy = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
-  // 1. Try Firebase Auth sign-in if identifier is an email
-  if (isEmail) {
-    try {
-      await signInWithEmailAndPassword(auth, cleanId.toLowerCase(), passwordInput);
-    } catch {
-      // Allow fallback to Firestore credentials check
-    }
-  }
-
-  // 2. Fetch fresh users directly from Cloud Firestore to guarantee cross-device accuracy
-  let cloudUsers: User[] = [];
-  try {
-    cloudUsers = await getAllUsersFromFirestore();
-  } catch (e) {
-    console.warn('Could not fetch cloud users, falling back to cache:', e);
-    cloudUsers = cachedUsers || [];
-  }
-
-  // 3. Find user by email or identification
-  const found = cloudUsers.find(
-    (u) =>
-      (u.correo && u.correo.toLowerCase() === cleanId.toLowerCase()) ||
-      (u.identificacion && u.identificacion.trim() === cleanId) ||
-      u.id === cleanId ||
-      u.uid === cleanId
-  );
-
-  if (!found) {
-    throw new Error('Usuario o correo no encontrado en el sistema.');
-  }
-
-  if (found.estado === 'Inactivo') {
-    throw new Error('Esta cuenta de usuario ha sido desactivada. Por favor contacta al administrador.');
-  }
-
-  // Verify password
-  const expectedPassword = found.password || 
-    (found.rol === 'estudiante' ? 'estudiante123' : found.rol === 'docente' ? 'docente123' : 'admin123');
-
-  if (expectedPassword && expectedPassword !== passwordInput.trim()) {
-    throw new Error('Contraseña incorrecta. Por favor intenta nuevamente.');
-  }
-
   const updatedUser: User = {
-    ...found,
+    ...userProfile,
     ultimoInicioSesion: now.toISOString(),
     fechaUltimoInicio: fechaHoy,
     horaUltimoInicio: horaHoy,
     haIniciadoSesion: true,
   };
 
-  // 4. Update Firestore in the cloud
   try {
     await updateUserDoc(updatedUser);
   } catch (e) {
-    console.warn('Error updating login timestamp in Firestore:', e);
+    console.warn('Notice updating login timestamp in Firestore:', e);
   }
 
   return updatedUser;
