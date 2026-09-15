@@ -1,70 +1,115 @@
-import { Classroom, DeskDamage, PHPFileCode, SystemNotification, User } from '../types';
+import { Classroom, DeskDamage, PHPFileCode, SystemNotification, User, GRADOS_COLEGIO } from '../types';
 
-export const initialClassrooms: Classroom[] = [
-  { id: 'salon-11a', nombre: 'Salón 11-A', ubicacion: 'Piso 2 - Bloque Principal', capacidad: 35, totalPupitres: 35 },
-  { id: 'salon-11b', nombre: 'Salón 11-B', ubicacion: 'Piso 2 - Bloque Principal', capacidad: 35, totalPupitres: 35 },
-  { id: 'salon-10a', nombre: 'Salón 10-A', ubicacion: 'Piso 1 - Bloque B', capacidad: 32, totalPupitres: 32 },
-  { id: 'salon-lab', nombre: 'Laboratorio de Física', ubicacion: 'Piso 1 - Bloque de Laboratorios', capacidad: 30, totalPupitres: 30 },
-];
+export const initialClassrooms: Classroom[] = GRADOS_COLEGIO.map((grado) => {
+  const [num] = grado.split('-');
+  const bloque = Number(num) >= 10 ? 'Bloque A - Piso 2' : Number(num) >= 8 ? 'Bloque B - Piso 2' : 'Bloque C - Piso 1';
+  return {
+    id: `salon-${grado.toLowerCase()}`,
+    nombre: `Grado ${grado}`,
+    ubicacion: `${bloque} (I.E.T. Pérez y Aldana)`,
+    capacidad: 35,
+    totalPupitres: 35,
+  };
+});
 
 export const initialUsers: User[] = [
   {
     id: 'usr-est-1',
     identificacion: '1001234567',
     nombre: 'Juan Pérez Rodríguez',
+    nombreCompleto: 'Juan Pérez Rodríguez',
     correo: 'juan.perez@perezyaldana.edu.co',
-    salonId: 'salon-11a',
-    salonNombre: 'Salón 11-A',
+    password: 'estudiante123',
+    salonId: 'salon-11-1',
+    salonNombre: '11-1',
+    grado: '11-1',
     rol: 'estudiante',
     fechaRegistro: '2026-02-01',
+    ultimoInicioSesion: '2026-09-14T09:45:10.000Z',
+    fechaUltimoInicio: '14/09/2026',
+    horaUltimoInicio: '09:45 AM',
+    estado: 'Activo',
+    haIniciadoSesion: true,
   },
   {
     id: 'usr-est-2',
     identificacion: '1009876543',
     nombre: 'María Paula Aldana',
+    nombreCompleto: 'María Paula Aldana',
     correo: 'maria.aldana@perezyaldana.edu.co',
-    salonId: 'salon-11b',
-    salonNombre: 'Salón 11-B',
+    password: 'estudiante123',
+    salonId: 'salon-11-2',
+    salonNombre: '11-2',
+    grado: '11-2',
     rol: 'estudiante',
     fechaRegistro: '2026-02-01',
+    ultimoInicioSesion: undefined,
+    fechaUltimoInicio: undefined,
+    horaUltimoInicio: undefined,
+    estado: 'Activo',
+    haIniciadoSesion: false,
   },
   {
     id: 'usr-est-3',
     identificacion: '1005554433',
     nombre: 'Carlos Andrés Gómez',
+    nombreCompleto: 'Carlos Andrés Gómez',
     correo: 'carlos.gomez@perezyaldana.edu.co',
-    salonId: 'salon-11a',
-    salonNombre: 'Salón 11-A',
+    password: 'estudiante123',
+    salonId: 'salon-10-1',
+    salonNombre: '10-1',
+    grado: '10-1',
     rol: 'estudiante',
     fechaRegistro: '2026-02-05',
+    ultimoInicioSesion: '2026-09-13T16:20:00.000Z',
+    fechaUltimoInicio: '13/09/2026',
+    horaUltimoInicio: '04:20 PM',
+    estado: 'Activo',
+    haIniciadoSesion: true,
   },
   {
     id: 'usr-doc-1',
     identificacion: '52123456',
     nombre: 'Prof. Carlos Alberto Mendoza',
+    nombreCompleto: 'Prof. Carlos Alberto Mendoza',
     correo: 'carlos.mendoza@perezyaldana.edu.co',
+    password: 'docente123',
     rol: 'docente',
     fechaRegistro: '2025-01-15',
+    ultimoInicioSesion: '2026-09-14T07:15:30.000Z',
+    fechaUltimoInicio: '14/09/2026',
+    horaUltimoInicio: '07:15 AM',
+    estado: 'Activo',
+    haIniciadoSesion: true,
   },
   {
     id: 'usr-adm-1',
     identificacion: '10101010',
     nombre: 'Dra. Elena Ramos (Coordinación)',
+    nombreCompleto: 'Dra. Elena Ramos',
     correo: 'administracion@perezyaldana.edu.co',
+    password: 'admin123',
     rol: 'administrador',
     fechaRegistro: '2025-01-10',
+    ultimoInicioSesion: '2026-09-14T08:30:00.000Z',
+    fechaUltimoInicio: '14/09/2026',
+    horaUltimoInicio: '08:30 AM',
+    estado: 'Activo',
+    haIniciadoSesion: true,
   },
 ];
 
 export const initialDeskDamages: DeskDamage[] = [
   {
     id: 'pup-1',
-    codigoPupitre: 'P-11A-04',
-    salonId: 'salon-11a',
-    salonNombre: 'Salón 11-A',
+    codigoPupitre: 'P-11-1-04',
+    salonId: 'salon-11-1',
+    salonNombre: '11-1',
+    grado: '11-1',
     estudianteId: 'usr-est-1',
     estudianteNombre: 'Juan Pérez Rodríguez',
     estudianteIdentificacion: '1001234567',
+    tipoDano: 'Pata dañada',
     motivo: 'Pata metálica desprendida en la soldadura inferior por sobrepeso de morral.',
     valorReparacion: 25000,
     estado: 'En reparación',
@@ -73,12 +118,14 @@ export const initialDeskDamages: DeskDamage[] = [
   },
   {
     id: 'pup-2',
-    codigoPupitre: 'P-11A-12',
-    salonId: 'salon-11a',
-    salonNombre: 'Salón 11-A',
+    codigoPupitre: 'P-11-1-12',
+    salonId: 'salon-11-1',
+    salonNombre: '11-1',
+    grado: '11-1',
     estudianteId: 'usr-est-3',
     estudianteNombre: 'Carlos Andrés Gómez',
     estudianteIdentificacion: '1005554433',
+    tipoDano: 'Respaldo dañado',
     motivo: 'Espaldar de madera laminada fisurado en el borde derecho.',
     valorReparacion: 45000,
     estado: 'Dañado',
@@ -87,12 +134,14 @@ export const initialDeskDamages: DeskDamage[] = [
   },
   {
     id: 'pup-3',
-    codigoPupitre: 'P-11B-08',
-    salonId: 'salon-11b',
-    salonNombre: 'Salón 11-B',
+    codigoPupitre: 'P-11-2-08',
+    salonId: 'salon-11-2',
+    salonNombre: '11-2',
+    grado: '11-2',
     estudianteId: 'usr-est-2',
     estudianteNombre: 'María Paula Aldana',
     estudianteIdentificacion: '1009876543',
+    tipoDano: 'Superficie dañada',
     motivo: 'Superficie de fórmica rayada con bisturí y graffiti de tinta.',
     valorReparacion: 18000,
     estado: 'Arreglado',
@@ -102,12 +151,14 @@ export const initialDeskDamages: DeskDamage[] = [
   },
   {
     id: 'pup-4',
-    codigoPupitre: 'P-10A-02',
-    salonId: 'salon-10a',
-    salonNombre: 'Salón 10-A',
+    codigoPupitre: 'P-10-1-02',
+    salonId: 'salon-10-1',
+    salonNombre: '10-1',
+    grado: '10-1',
     estudianteId: 'usr-est-1',
     estudianteNombre: 'Juan Pérez Rodríguez',
     estudianteIdentificacion: '1001234567',
+    tipoDano: 'Estructura dañada',
     motivo: 'Parrilla inferior porta-cuadernos doblada y desajustada.',
     valorReparacion: 35000,
     estado: 'En reparación',
@@ -116,14 +167,16 @@ export const initialDeskDamages: DeskDamage[] = [
   },
   {
     id: 'pup-5',
-    codigoPupitre: 'P-LAB-15',
-    salonId: 'salon-lab',
-    salonNombre: 'Laboratorio de Física',
+    codigoPupitre: 'P-9-3-15',
+    salonId: 'salon-9-3',
+    salonNombre: '9-3',
+    grado: '9-3',
     estudianteId: 'usr-est-2',
     estudianteNombre: 'María Paula Aldana',
     estudianteIdentificacion: '1009876543',
-    motivo: 'Mecanismo de elevación de silla giratoria trancado.',
-    valorReparacion: 50000,
+    tipoDano: 'Tornillos o piezas faltantes',
+    motivo: 'Tornillos de anclaje de la base desprendidos.',
+    valorReparacion: 15000,
     estado: 'Dañado',
     fechaRegistro: '2026-08-10',
     observacionesAdicionales: 'Programado para revisión por el equipo de mantenimiento.',
@@ -163,6 +216,99 @@ export const initialNotifications: SystemNotification[] = [
 
 export const phpMvcSourceCode: PHPFileCode[] = [
   {
+    filename: 'README.md',
+    path: 'README.md',
+    category: 'docs',
+    description: 'Manual de Instalación, Configuración Global, Lenguajes, Framework MVC y MySQL para XAMPP.',
+    content: `# INNOVATECH — Sistema de Gestión y Control de Pupitres Dañados
+### Institución Educativa Técnica Pérez y Aldana — Proyecto Técnico de Grado 11
+
+---
+
+## 📋 1. DESCRIPCIÓN GENERAL DEL PROYECTO
+INNOVATECH es un sistema web integral diseñado para auditar, gestionar y controlar el inventario de pupitres de la Institución Educativa Técnica Pérez y Aldana.
+Permite registrar averías, cotizar costos de reparación en pesos colombianos ($ COP), asociar responsables por salón y diferenciar permisos entre Estudiantes y Docentes/Administradores.
+
+---
+
+## 💻 2. TIPOS DE LENGUAJE UTILIZADOS
+- PHP (v8.0+): Lógica del servidor (Backend), sesiones seguras ($_SESSION), algoritmos criptográficos (password_hash y password_verify con BCRYPT) y controladores/modelos MVC.
+- SQL (Structured Query Language): Consultas preparadas con PDO (PDOStatement::execute, bindParam) para eliminar vulnerabilidades de inyección SQL.
+- TypeScript / JavaScript (ES6+): Validaciones de formularios en el cliente en tiempo real y lógica reactiva de interfaz.
+- HTML5 Semántico: Estructuración con etiquetas semánticas y atributos de accesibilidad estándar.
+- CSS3 / Tailwind CSS: Paleta institucional oficial (Verde Oscuro #06200f, Verde Neón #39ff14, Azul Marino #091d36, Blanco #ffffff).
+
+---
+
+## ⚙️ 3. TIPO DE FRAMEWORK Y ARQUITECTURA
+- Backend: Arquitectura MVC Nativa en PHP (Vanilla / Pure MVC). No depende de frameworks externos pesados para garantizar comprensión y defensa pedagógica completa en Grado 11.
+- Capa de Datos: PHP Data Objects (PDO) con modo de errores estricto (PDO::ERRMODE_EXCEPTION) y mapeo asociativo.
+- Frontend / Simulador: React 18+ con Vite, Tailwind CSS y Lucide Icons.
+
+---
+
+## 🗄️ 4. TIPO DE BASE DE DATOS
+- Motor: MySQL o MariaDB (gestionable directamente en phpMyAdmin vía XAMPP, WAMP o LAMP).
+- Codificación: utf8mb4 con cotejamiento utf8mb4_unicode_ci (soporte total de caracteres en español).
+- Tablas Principales:
+  1. 'salones': id, codigo_salon, nombre, ubicacion, capacidad, total_pupitres.
+  2. 'usuarios': id, identificacion (cédula/TI), nombre_completo, correo, password_hash, rol, salon_id.
+  3. 'pupitres_danados': id, codigo_pupitre, salon_id, estudiante_responsable_id, motivo, valor_reparacion, estado ('Dañado', 'En reparación', 'Arreglado'), observaciones.
+
+---
+
+## 🛠️ 5. CONFIGURACIÓN INICIAL (REQUISITOS PREVIOS)
+1. Instalar XAMPP (Apache 2.4+, PHP 8.0+, MySQL 10.4+) desde https://www.apachefriends.org/.
+2. Editor de Código: Visual Studio Code con extensiones recomendadas (PHP Intelephense, MySQL Client).
+3. Navegador Web Moderno (Google Chrome, Firefox o Edge).
+4. Opcional (para desarrollo React): Node.js v18+ y npm.
+
+---
+
+## 🚀 6. CONFIGURACIÓN DEL PROYECTO (PASO A PASO)
+Paso 1: Copiar la carpeta del proyecto a:
+  C:/xampp/htdocs/innovatech/
+
+Paso 2: En phpMyAdmin (http://localhost/phpmyadmin/):
+  - Crear o seleccionar base de datos 'innovatech_db'.
+  - Importar el archivo 'schema.sql'.
+  - Las tablas y datos de prueba con contraseñas encriptadas se crearán automáticamente.
+
+Paso 3: Verificar conexión en 'config/Database.php':
+  - Host: 'localhost'
+  - DB Name: 'innovatech_db'
+  - Username: 'root'
+  - Password: '' (vacía por defecto en XAMPP)
+
+Paso 4: Iniciar en el navegador:
+  http://localhost/innovatech/index.php
+
+---
+
+## 🌐 7. CONFIGURACIÓN GLOBAL PARA QUE FUNCIONE CORRECTAMENTE
+A. En 'php.ini' de Apache:
+  - Habilitar extensión PDO MySQL: 'extension=pdo_mysql'
+  - Zona horaria de Colombia: 'date.timezone = America/Bogota'
+  - Manejo seguro de sesiones: 'session.cookie_httponly = 1'
+  - Reiniciar el servicio Apache en XAMPP Control Panel tras cualquier cambio.
+
+B. Seguridad y Sesiones:
+  - 'session_start();' en cada controlador.
+  - Validación de rutas con 'if (!isset($_SESSION["usuario_id"]))'.
+  - Cifrado con 'password_hash($pass, PASSWORD_BCRYPT)' y verificación con 'password_verify()'.
+
+C. Servidor Web (.htaccess):
+  - Asegurar la directiva 'Options -Indexes' para evitar listado de archivos en producción.
+
+---
+
+## 🔑 8. USUARIOS Y CREDENCIALES DE PRUEBA (DEMO)
+- Estudiante 1: Doc '1001234567' | Clave 'estudiante123' | Salón 11-A
+- Estudiante 2: Doc '1009876543' | Clave 'estudiante123' | Salón 11-B
+- Docente: Doc '52123456' | Clave 'docente123' | Dirección Grado 11
+- Coordinador/Admin: Doc '10101010' | Clave 'admin123' | Coordinación`,
+  },
+  {
     filename: 'schema.sql',
     path: 'schema.sql',
     category: 'sql',
@@ -192,8 +338,11 @@ CREATE TABLE IF NOT EXISTS usuarios (
     correo VARCHAR(100) UNIQUE,
     password VARCHAR(255) NOT NULL, -- Encriptado seguro con password_hash()
     rol ENUM('estudiante', 'docente', 'administrador') NOT NULL,
+    tipo_usuario ENUM('estudiante', 'docente', 'administrador') NOT NULL, -- Alias para auditoría
     salon_id INT NULL,
     fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    ultimo_inicio_sesion DATETIME NULL, -- Fecha y hora del último acceso al sistema
+    estado ENUM('Activo', 'Inactivo') DEFAULT 'Activo',
     FOREIGN KEY (salon_id) REFERENCES salones(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
@@ -319,8 +468,8 @@ class UsuarioModel {
         $password_hash = password_hash($password, PASSWORD_BCRYPT);
 
         $query = "INSERT INTO " . $this->table_name . " 
-                  (identificacion, nombre, correo, password, rol, salon_id) 
-                  VALUES (:identificacion, :nombre, :correo, :password, :rol, :salon_id)";
+                  (identificacion, nombre, correo, password, rol, salon_id, estado, ultimo_inicio_sesion) 
+                  VALUES (:identificacion, :nombre, :correo, :password, :rol, :salon_id, 'Activo', NULL)";
 
         $stmt = $this->conn->prepare($query);
         $stmt->bindParam(':identificacion', $identificacion);
@@ -331,6 +480,28 @@ class UsuarioModel {
         $stmt->bindParam(':salon_id', $salon_id);
 
         return $stmt->execute();
+    }
+
+    // Actualizar fecha y hora del último inicio de sesión
+    public function actualizarUltimoInicioSesion($id) {
+        $query = "UPDATE " . $this->table_name . " 
+                  SET ultimo_inicio_sesion = NOW() 
+                  WHERE id = :id";
+        $stmt = $this->conn->prepare($query);
+        $stmt->bindParam(':id', $id);
+        return $stmt->execute();
+    }
+
+    // Obtener todos los usuarios registrados (Para el Dashboard del Administrador)
+    public function obtenerTodos() {
+        $query = "SELECT u.id, u.identificacion, u.nombre, u.correo, u.rol, u.estado, 
+                         u.ultimo_inicio_sesion, s.nombre_salon 
+                  FROM " . $this->table_name . " u 
+                  LEFT JOIN salones s ON u.salon_id = s.id 
+                  ORDER BY u.id ASC";
+        $stmt = $this->conn->prepare($query);
+        $stmt->execute();
+        return $stmt->fetchAll();
     }
 }
 ?>`,

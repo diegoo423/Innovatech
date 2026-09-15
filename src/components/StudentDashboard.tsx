@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, DeskDamage, SystemNotification, Classroom } from '../types';
+import { User, DeskDamage, SystemNotification, Classroom, GRADOS_COLEGIO, GradoColegio, TIPOS_DANO, TipoDano } from '../types';
 import { 
   School, 
   Search, 
@@ -35,15 +35,27 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   const [statusFilter, setStatusFilter] = useState<string>('todos');
   const [activeTab, setActiveTab] = useState<'my_classroom' | 'my_history' | 'notifications' | 'report'>('my_classroom');
 
-  // Report modal state
+  // Student grade helper
+  const initialStudentGrado = (user.grado && GRADOS_COLEGIO.includes(user.grado as GradoColegio)) 
+    ? (user.grado as GradoColegio) 
+    : (user.salonNombre && GRADOS_COLEGIO.includes(user.salonNombre as GradoColegio)) 
+    ? (user.salonNombre as GradoColegio)
+    : '11-1';
+
+  // Report form state
   const [codigoPupitre, setCodigoPupitre] = useState('');
+  const [reportGrado, setReportGrado] = useState<GradoColegio>(initialStudentGrado);
+  const [reportTipoDano, setReportTipoDano] = useState<TipoDano>('Superficie dañada');
+  const [reportCustomDano, setReportCustomDano] = useState('');
   const [motivoReporte, setMotivoReporte] = useState('');
   const [showReportSuccess, setShowReportSuccess] = useState(false);
 
-  // Filter damages for student's assigned classroom
-  const studentClassroom = classrooms.find((c) => c.id === user.salonId) || classrooms[0];
-  
-  const classroomDamages = damages.filter((d) => d.salonId === user.salonId || d.salonNombre === user.salonNombre);
+  // Filter damages for student's assigned classroom/grade
+  const classroomDamages = damages.filter((d) => 
+    (user.grado && (d.grado === user.grado || d.salonNombre.includes(user.grado))) ||
+    d.salonId === user.salonId || 
+    d.salonNombre === user.salonNombre
+  );
   
   const studentHistoryDamages = damages.filter(
     (d) => d.estudianteIdentificacion === user.identificacion || d.estudianteNombre.toLowerCase().includes(user.nombre.toLowerCase().split(' ')[0])
@@ -64,14 +76,18 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
     e.preventDefault();
     if (!codigoPupitre.trim() || !motivoReporte.trim()) return;
 
+    const finalTipoDano = reportTipoDano === 'Otro' ? (reportCustomDano.trim() || 'Otro tipo de daño') : reportTipoDano;
+
     onReportDamage({
-      codigoPupitre: codigoPupitre.toUpperCase(),
-      salonId: user.salonId || 'salon-11a',
-      salonNombre: user.salonNombre || 'Salón 11-A',
+      codigoPupitre: codigoPupitre.toUpperCase().trim(),
+      salonId: `salon-${reportGrado.toLowerCase()}`,
+      salonNombre: `Grado ${reportGrado}`,
+      grado: reportGrado,
       estudianteId: user.id,
       estudianteNombre: user.nombre,
       estudianteIdentificacion: user.identificacion,
-      motivo: motivoReporte,
+      tipoDano: finalTipoDano,
+      motivo: motivoReporte.trim(),
       valorReparacion: 0,
       estado: 'Dañado',
       observacionesAdicionales: 'Reportado por el estudiante desde la plataforma.',
@@ -79,6 +95,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
     setCodigoPupitre('');
     setMotivoReporte('');
+    setReportCustomDano('');
     setShowReportSuccess(true);
     setTimeout(() => {
       setShowReportSuccess(false);
@@ -408,42 +425,82 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             </div>
           ) : (
             <form onSubmit={handleReportSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold uppercase text-gray-700 mb-1">
-                  Código del Pupitre (ej. P-11A-09)
-                </label>
-                <input
-                  type="text"
-                  value={codigoPupitre}
-                  onChange={(e) => setCodigoPupitre(e.target.value)}
-                  placeholder="Ejemplo: P-11A-09"
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-verde-neon"
-                  required
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-gray-700 mb-1">
+                    Código del Pupitre (ej. P-11-1-09) *
+                  </label>
+                  <input
+                    type="text"
+                    value={codigoPupitre}
+                    onChange={(e) => setCodigoPupitre(e.target.value)}
+                    placeholder="Ejemplo: P-11-1-09"
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-verde-neon"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase text-gray-700 mb-1">
+                    Grado / Salón *
+                  </label>
+                  <select
+                    value={reportGrado}
+                    onChange={(e) => setReportGrado(e.target.value as GradoColegio)}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-verde-neon"
+                  >
+                    {GRADOS_COLEGIO.map((g) => (
+                      <option key={g} value={g}>
+                        Grado {g}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               <div>
                 <label className="block text-xs font-bold uppercase text-gray-700 mb-1">
-                  Salón de Clase
+                  Tipo de Daño o Avería *
                 </label>
-                <input
-                  type="text"
-                  value={user.salonNombre || 'Salón 11-A'}
-                  disabled
-                  className="w-full px-4 py-2.5 bg-gray-100 border border-gray-300 rounded-xl text-sm text-gray-600 font-bold"
-                />
+                <select
+                  value={reportTipoDano}
+                  onChange={(e) => setReportTipoDano(e.target.value as TipoDano)}
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-verde-neon"
+                >
+                  {TIPOS_DANO.map((tipo) => (
+                    <option key={tipo} value={tipo}>
+                      {tipo}
+                    </option>
+                  ))}
+                </select>
               </div>
+
+              {reportTipoDano === 'Otro' && (
+                <div>
+                  <label className="block text-xs font-bold uppercase text-amber-700 mb-1">
+                    Especificar Otro Tipo de Daño *
+                  </label>
+                  <input
+                    type="text"
+                    value={reportCustomDano}
+                    onChange={(e) => setReportCustomDano(e.target.value)}
+                    placeholder="Describe el tipo de daño..."
+                    className="w-full px-4 py-2.5 bg-amber-50/50 border border-amber-300 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-amber-500 outline-none"
+                    required
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-bold uppercase text-gray-700 mb-1">
-                  Motivo / Causa del Daño
+                  Descripción o Causa del Daño *
                 </label>
                 <textarea
                   value={motivoReporte}
                   onChange={(e) => setMotivoReporte(e.target.value)}
-                  placeholder="Describe claramente qué le sucedió al pupitre (ej. Pata desprendida, tríplex roto, fórmica despegada...)"
-                  rows={4}
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-verde-neon"
+                  placeholder="Describe claramente qué le sucedió al pupitre (ej. Pata desprendida, tríplex roto, fórmica rayada...)"
+                  rows={3}
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-verde-neon"
                   required
                 />
               </div>

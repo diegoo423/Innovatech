@@ -1,0 +1,185 @@
+{
+  "entities": {
+    "DeskDamage": {
+      "title": "DeskDamage",
+      "description": "Registro de daño o novedad en pupitre o mobiliario escolar",
+      "type": "object",
+      "properties": {
+        "codigoPupitre": {
+          "type": "string",
+          "description": "Código identificador del pupitre",
+          "maxLength": 64
+        },
+        "salonId": {
+          "type": "string",
+          "description": "ID del salón de clase",
+          "maxLength": 64
+        },
+        "salonNombre": {
+          "type": "string",
+          "description": "Nombre del salón de clase",
+          "maxLength": 128
+        },
+        "estudianteResponsableId": {
+          "type": "string",
+          "description": "ID o documento del estudiante responsable asignado",
+          "maxLength": 64
+        },
+        "estudianteNombre": {
+          "type": "string",
+          "description": "Nombre del estudiante responsable",
+          "maxLength": 128
+        },
+        "motivo": {
+          "type": "string",
+          "description": "Descripción de la falla o motivo del daño",
+          "maxLength": 500
+        },
+        "valorReparacion": {
+          "type": "number",
+          "description": "Valor estimado de reparación en pesos COP"
+        },
+        "estado": {
+          "type": "string",
+          "description": "Estado de reparación del pupitre",
+          "enum": ["Dañado", "En reparación", "Arreglado"]
+        },
+        "observaciones": {
+          "type": "string",
+          "description": "Observaciones adicionales sobre la reparación o seguimiento",
+          "maxLength": 500
+        },
+        "fechaRegistro": {
+          "type": "string",
+          "description": "Fecha del registro en formato YYYY-MM-DD",
+          "maxLength": 32
+        }
+      },
+      "required": ["codigoPupitre", "salonNombre", "motivo", "valorReparacion", "estado", "fechaRegistro"]
+    },
+    "Classroom": {
+      "title": "Classroom",
+      "description": "Salón de clase de la institución educativa",
+      "type": "object",
+      "properties": {
+        "codigo": {
+          "type": "string",
+          "description": "Código del salón",
+          "maxLength": 32
+        },
+        "nombre": {
+          "type": "string",
+          "description": "Nombre del aula o salón",
+          "maxLength": 128
+        },
+        "ubicacion": {
+          "type": "string",
+          "description": "Ubicación física en el colegio",
+          "maxLength": 128
+        },
+        "totalPupitres": {
+          "type": "number",
+          "description": "Cantidad total de pupitres asignados"
+        },
+        "danados": {
+          "type": "number",
+          "description": "Cantidad de pupitres dañados actualmente"
+        }
+      },
+      "required": ["codigo", "nombre", "ubicacion", "totalPupitres"]
+    },
+    "SystemNotification": {
+      "title": "SystemNotification",
+      "description": "Notificación y aviso del sistema para la comunidad educativa",
+      "type": "object",
+      "properties": {
+        "titulo": {
+          "type": "string",
+          "description": "Título de la notificación",
+          "maxLength": 128
+        },
+        "mensaje": {
+          "type": "string",
+          "description": "Cuerpo del mensaje",
+          "maxLength": 500
+        },
+        "fecha": {
+          "type": "string",
+          "description": "Fecha de emisión",
+          "maxLength": 32
+        },
+        "tipo": {
+          "type": "string",
+          "description": "Tipo de notificación",
+          "enum": ["warning", "info", "success"]
+        },
+        "destinatarioRol": {
+          "type": "string",
+          "description": "Rol al que va dirigido",
+          "enum": ["todos", "docente", "estudiante"]
+        },
+        "leido": {
+          "type": "boolean",
+          "description": "Indicador si ha sido leída"
+        }
+      },
+      "required": ["titulo", "mensaje", "fecha", "tipo", "destinatarioRol"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Usuario del sistema escolar (Estudiante, Docente o Administrador)",
+      "type": "object",
+      "properties": {
+        "identificacion": {
+          "type": "string",
+          "description": "Número de cédula o tarjeta de identidad",
+          "maxLength": 32
+        },
+        "nombreCompleto": {
+          "type": "string",
+          "description": "Nombre y apellidos completos",
+          "maxLength": 128
+        },
+        "correo": {
+          "type": "string",
+          "description": "Correo electrónico institucional o personal",
+          "maxLength": 128
+        },
+        "rol": {
+          "type": "string",
+          "description": "Rol de usuario",
+          "enum": ["estudiante", "docente", "administrador"]
+        },
+        "salonId": {
+          "type": "string",
+          "description": "ID del salón asignado",
+          "maxLength": 64
+        },
+        "salonNombre": {
+          "type": "string",
+          "description": "Nombre del salón asignado",
+          "maxLength": 128
+        }
+      },
+      "required": ["identificacion", "nombreCompleto", "correo", "rol"]
+    }
+  },
+  "firestore": {
+    "/pupitres/{pupitreId}": {
+      "schema": "DeskDamage",
+      "description": "Colección de registros de pupitres y novedades de mantenimiento"
+    },
+    "/salones/{salonId}": {
+      "schema": "Classroom",
+      "description": "Colección de salones de clase y estado de mobiliario"
+    },
+    "/notificaciones/{notificacionId}": {
+      "schema": "SystemNotification",
+      "description": "Colección de avisos y notificaciones institucionales"
+    },
+    "/usuarios/{usuarioId}": {
+      "schema": "User",
+      "description": "Colección de perfiles de usuario y roles"
+    }
+  }
+}

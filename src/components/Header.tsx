@@ -13,7 +13,9 @@ import {
   School,
   CheckCircle2,
   AlertTriangle,
-  Info
+  Info,
+  Database,
+  Cloud
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -23,6 +25,7 @@ interface HeaderProps {
   setActiveTab: (tab: 'dashboard' | 'new_damage' | 'reports' | 'code_mvc' | 'notifications') => void;
   notifications: SystemNotification[];
   onSwitchUser: (userId: string) => void;
+  firebaseConnected?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -32,6 +35,7 @@ export const Header: React.FC<HeaderProps> = ({
   setActiveTab,
   notifications,
   onSwitchUser,
+  firebaseConnected = true,
 }) => {
   const [showNotifMenu, setShowNotifMenu] = useState(false);
   const [showRoleSwitcher, setShowRoleSwitcher] = useState(false);
@@ -52,6 +56,15 @@ export const Header: React.FC<HeaderProps> = ({
               <div className="flex items-center space-x-2">
                 <span className="font-extrabold text-xl tracking-wider text-verde-neon">INNOVATECH</span>
                 <span className="text-xs bg-azul-oscuro text-verde-neon px-2 py-0.5 rounded border border-verde-neon/30 font-mono">v1.0 MVC</span>
+                <span className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-medium border ${
+                  firebaseConnected 
+                    ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40' 
+                    : 'bg-amber-950/80 text-amber-300 border-amber-500/40'
+                }`}>
+                  <Database className="w-3 h-3 text-amber-400" />
+                  <span>{firebaseConnected ? 'Firebase DB' : 'Local DB'}</span>
+                  <span className={`w-1.5 h-1.5 rounded-full ${firebaseConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                </span>
               </div>
               <p className="text-xs text-gray-300 font-medium">
                 I.E. Técnica Pérez y Aldana

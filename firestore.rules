@@ -1,0 +1,86 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidDeskDamage(data) {
+      return data.codigoPupitre is string && data.codigoPupitre.size() <= 64 &&
+             data.salonNombre is string && data.salonNombre.size() <= 128 &&
+             data.motivo is string && data.motivo.size() <= 500 &&
+             data.valorReparacion is number && data.valorReparacion >= 0 &&
+             (data.estado == 'Dañado' || data.estado == 'En reparación' || data.estado == 'Arreglado') &&
+             data.fechaRegistro is string && data.fechaRegistro.size() <= 32;
+    }
+
+    function isValidClassroom(data) {
+      return (data.codigo is string || data.id is string) &&
+             data.nombre is string && data.nombre.size() <= 128 &&
+             data.ubicacion is string && data.ubicacion.size() <= 128 &&
+             data.totalPupitres is number && data.totalPupitres >= 0;
+    }
+
+    function isValidNotification(data) {
+      return data.titulo is string && data.titulo.size() <= 128 &&
+             data.mensaje is string && data.mensaje.size() <= 500 &&
+             data.fecha is string && data.fecha.size() <= 32 &&
+             (data.tipo == 'warning' || data.tipo == 'info' || data.tipo == 'success') &&
+             (data.destinatarioRol == 'todos' || data.destinatarioRol == 'docente' || data.destinatarioRol == 'estudiante');
+    }
+
+    function isValidUser(data) {
+      return data.identificacion is string && data.identificacion.size() <= 32 &&
+             (data.nombre is string || data.nombreCompleto is string) &&
+             (data.correo is string || data.email is string) &&
+             (data.rol == 'estudiante' || data.rol == 'docente' || data.rol == 'administrador');
+    }
+
+    // Colección de Pupitres Dañados
+    match /pupitres/{pupitreId} {
+      allow read: if isValidId(pupitreId);
+      allow create: if isValidId(pupitreId) && isValidDeskDamage(incoming());
+      allow update: if isValidId(pupitreId) && isValidDeskDamage(incoming());
+      allow delete: if isValidId(pupitreId);
+    }
+
+    // Colección de Salones de Clase
+    match /salones/{salonId} {
+      allow read: if isValidId(salonId);
+      allow create: if isValidId(salonId) && isValidClassroom(incoming());
+      allow update: if isValidId(salonId) && isValidClassroom(incoming());
+      allow delete: if isValidId(salonId);
+    }
+
+    // Colección de Notificaciones Institucionales
+    match /notificaciones/{notificacionId} {
+      allow read: if isValidId(notificacionId);
+      allow create: if isValidId(notificacionId) && isValidNotification(incoming());
+      allow update: if isValidId(notificacionId) && isValidNotification(incoming());
+      allow delete: if isValidId(notificacionId);
+    }
+
+    // Colección de Usuarios
+    match /usuarios/{usuarioId} {
+      allow read: if isValidId(usuarioId);
+      allow create: if isValidId(usuarioId) && isValidUser(incoming());
+      allow update: if isValidId(usuarioId) && isValidUser(incoming());
+      allow delete: if isValidId(usuarioId);
+    }
+  }
+}

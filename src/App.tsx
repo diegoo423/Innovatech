@@ -23,10 +23,29 @@ import {
   PieChart, 
   Info,
   ShieldCheck,
-  GraduationCap
+  GraduationCap,
+  Database,
+  CloudCheck
 } from 'lucide-react';
+import {
+  db,
+  testConnection,
+  seedInitialDataIfEmpty,
+  createPupitreDoc,
+  updatePupitreDoc,
+  deletePupitreDoc,
+  createClassroomDoc,
+  createNotificationDoc,
+  createUserDoc,
+  updateUserDoc,
+  handleFirestoreError,
+  OperationType
+} from './firebase';
+import { collection, onSnapshot } from 'firebase/firestore';
 
 export default function App() {
+  const [firebaseConnected, setFirebaseConnected] = useState<boolean>(true);
+
   // State initialization with localStorage persistence
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     const saved = localStorage.getItem('innovatech_user');
@@ -55,7 +74,121 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState<'dashboard' | 'new_damage' | 'reports' | 'code_mvc' | 'notifications'>('dashboard');
 
-  // Sync state to localStorage
+  // Initialize Firebase and set up real-time listeners
+  useEffect(() => {
+    let unsubscribePupitres: (() => void) | undefined;
+    let unsubscribeSalones: (() => void) | undefined;
+    let unsubscribeNotif: (() => void) | undefined;
+    let unsubscribeUsers: (() => void) | undefined;
+
+    async function initFirebase() {
+      const isOnline = await testConnection();
+      setFirebaseConnected(isOnline);
+
+      if (isOnline) {
+        await seedInitialDataIfEmpty();
+
+        // 1. Listen to Pupitres in real-time
+        try {
+          unsubscribePupitres = onSnapshot(
+            collection(db, 'pupitres'),
+            (snapshot) => {
+              if (!snapshot.empty) {
+                const loaded: DeskDamage[] = [];
+                snapshot.forEach((docSnap) => {
+                  loaded.push(docSnap.data() as DeskDamage);
+                });
+                setDamages(loaded);
+              }
+            },
+            (error) => {
+              console.error('Pupitres snapshot error:', error);
+              handleFirestoreError(error, OperationType.GET, 'pupitres');
+            }
+          );
+        } catch (e) {
+          console.warn('Could not attach pupitres listener:', e);
+        }
+
+        // 2. Listen to Salones in real-time
+        try {
+          unsubscribeSalones = onSnapshot(
+            collection(db, 'salones'),
+            (snapshot) => {
+              if (!snapshot.empty) {
+                const loaded: Classroom[] = [];
+                snapshot.forEach((docSnap) => {
+                  loaded.push(docSnap.data() as Classroom);
+                });
+                setClassrooms(loaded);
+              }
+            },
+            (error) => {
+              console.error('Salones snapshot error:', error);
+              handleFirestoreError(error, OperationType.GET, 'salones');
+            }
+          );
+        } catch (e) {
+          console.warn('Could not attach salones listener:', e);
+        }
+
+        // 3. Listen to Notifications in real-time
+        try {
+          unsubscribeNotif = onSnapshot(
+            collection(db, 'notificaciones'),
+            (snapshot) => {
+              if (!snapshot.empty) {
+                const loaded: SystemNotification[] = [];
+                snapshot.forEach((docSnap) => {
+                  loaded.push(docSnap.data() as SystemNotification);
+                });
+                setNotifications(loaded);
+              }
+            },
+            (error) => {
+              console.error('Notificaciones snapshot error:', error);
+              handleFirestoreError(error, OperationType.GET, 'notificaciones');
+            }
+          );
+        } catch (e) {
+          console.warn('Could not attach notificaciones listener:', e);
+        }
+
+        // 4. Listen to Users in real-time
+        try {
+          unsubscribeUsers = onSnapshot(
+            collection(db, 'usuarios'),
+            (snapshot) => {
+              if (!snapshot.empty) {
+                const loaded: User[] = [];
+                snapshot.forEach((docSnap) => {
+                  loaded.push(docSnap.data() as User);
+                });
+                setUsers(loaded);
+              }
+            },
+            (error) => {
+              console.error('Usuarios snapshot error:', error);
+              handleFirestoreError(error, OperationType.GET, 'usuarios');
+            }
+          );
+        } catch (e) {
+          console.warn('Could not attach usuarios listener:', e);
+        }
+      }
+    }
+
+    initFirebase();
+
+    return () => {
+      if (unsubscribePupitres) unsubscribePupitres();
+      if (unsubscribeSalones) unsubscribeSalones();
+      if (unsubscribeNotif) unsubscribeNotif();
+      if (unsubscribeUsers) unsubscribeUsers();
+    };
+  }, []);
+
+  // Sync state to localStorage for robust offline resilience
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem('innovatech_user', JSON.stringify(currentUser));
@@ -81,9 +214,55 @@ export default function App() {
   }, [users]);
 
   // Auth Handlers
-  const handleLoginSuccess = (user: User) => {
-    setCurrentUser(user);
+  const handleLoginSuccess = async (userLoggedIn: User) => {
+    const now = new Date();
+    const fechaActual = now.toLocaleDateString('es-CO', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+    const horaActual = now.toLocaleTimeString('es-CO', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+    const timestampIso = now.toISOString();
+
+    const updatedUser: User = {
+      ...userLoggedIn,
+      ultimoInicioSesion: timestampIso,
+      fechaUltimoInicio: fechaActual,
+      horaUltimoInicio: horaActual,
+      haIniciadoSesion: true,
+      estado: userLoggedIn.estado || 'Activo',
+    };
+
+    setCurrentUser(updatedUser);
     setActiveTab('dashboard');
+
+    // Update in memory and localStorage list
+    setUsers((prev) =>
+      prev.map((u) => (u.id === updatedUser.id ? updatedUser : u))
+    );
+
+    // Persist login timestamp in Firebase Cloud Firestore
+    try {
+      await updateUserDoc(updatedUser);
+    } catch (e) {
+      console.warn('Error syncing user login with Firestore:', e);
+    }
+  };
+
+  const handleUpdateUser = async (updatedUser: User) => {
+    setUsers((prev) => prev.map((u) => (u.id === updatedUser.id ? updatedUser : u)));
+    if (currentUser && currentUser.id === updatedUser.id) {
+      setCurrentUser(updatedUser);
+    }
+    try {
+      await updateUserDoc(updatedUser);
+    } catch (e) {
+      console.warn('Error updating user in Firestore:', e);
+    }
   };
 
   const handleLogout = () => {
@@ -98,14 +277,15 @@ export default function App() {
     }
   };
 
-  // Damage CRUD Handlers
-  const handleAddDamage = (newDamage: Omit<DeskDamage, 'id' | 'fechaRegistro'>) => {
+  // Damage CRUD Handlers (with Firebase Cloud Firestore synchronization)
+  const handleAddDamage = async (newDamage: Omit<DeskDamage, 'id' | 'fechaRegistro'>) => {
     const created: DeskDamage = {
       ...newDamage,
       id: `pup-${Date.now()}`,
       fechaRegistro: new Date().toISOString().split('T')[0],
     };
 
+    // Optimistic UI update
     setDamages([created, ...damages]);
 
     // Send automated notification
@@ -120,25 +300,73 @@ export default function App() {
     };
 
     setNotifications([newNotif, ...notifications]);
-  };
 
-  const handleUpdateDamage = (updated: DeskDamage) => {
-    setDamages(damages.map((d) => (d.id === updated.id ? updated : d)));
-  };
-
-  const handleDeleteDamage = (id: string) => {
-    if (window.confirm('¿Estás seguro de eliminar este registro de pupitre?')) {
-      setDamages(damages.filter((d) => d.id !== id));
+    // Persist in Firebase Cloud Firestore
+    try {
+      await createPupitreDoc(created);
+      await createNotificationDoc(newNotif);
+    } catch (e) {
+      console.warn('Firebase sync delayed:', e);
     }
   };
 
-  const handleAddClassroom = (newClassroom: Classroom) => {
+  const handleUpdateDamage = async (updated: DeskDamage) => {
+    // Optimistic UI update
+    setDamages(damages.map((d) => (d.id === updated.id ? updated : d)));
+
+    // Persist in Firebase Cloud Firestore
+    try {
+      await updatePupitreDoc(updated);
+    } catch (e) {
+      console.warn('Firebase update delayed:', e);
+    }
+  };
+
+  const handleDeleteDamage = async (id: string) => {
+    // Optimistic UI update
+    setDamages(damages.filter((d) => d.id !== id));
+
+    // Persist in Firebase Cloud Firestore
+    try {
+      await deletePupitreDoc(id);
+    } catch (e) {
+      console.warn('Firebase delete delayed:', e);
+    }
+  };
+
+  const handleRegisterUser = async (newUser: User) => {
+    // Update local state immediately
+    setUsers((prev) => [newUser, ...prev]);
+
+    // Persist in Firebase Cloud Firestore
+    try {
+      await createUserDoc(newUser);
+    } catch (e) {
+      console.warn('Firebase user sync delayed:', e);
+    }
+  };
+
+  const handleAddClassroom = async (newClassroom: Classroom) => {
+    // Optimistic UI update
     setClassrooms([...classrooms, newClassroom]);
+
+    // Persist in Firebase Cloud Firestore
+    try {
+      await createClassroomDoc(newClassroom);
+    } catch (e) {
+      console.warn('Firebase classroom sync delayed:', e);
+    }
   };
 
   // If user is not logged in, render the exact requested Login View
   if (!currentUser) {
-    return <LoginView onLoginSuccess={handleLoginSuccess} users={users} />;
+    return (
+      <LoginView 
+        onLoginSuccess={handleLoginSuccess} 
+        onRegisterUser={handleRegisterUser} 
+        users={users} 
+      />
+    );
   }
 
   return (
@@ -152,6 +380,7 @@ export default function App() {
         setActiveTab={setActiveTab}
         notifications={notifications}
         onSwitchUser={handleSwitchUser}
+        firebaseConnected={firebaseConnected}
       />
 
       {/* Main Container Content */}
@@ -171,6 +400,8 @@ export default function App() {
             onUpdateDamage={handleUpdateDamage}
             onDeleteDamage={handleDeleteDamage}
             onAddClassroom={handleAddClassroom}
+            onUpdateUser={handleUpdateUser}
+            defaultOpenModal={true}
           />
         )}
 
@@ -287,6 +518,7 @@ export default function App() {
                 onUpdateDamage={handleUpdateDamage}
                 onDeleteDamage={handleDeleteDamage}
                 onAddClassroom={handleAddClassroom}
+                onUpdateUser={handleUpdateUser}
               />
             )}
           </>
@@ -295,13 +527,19 @@ export default function App() {
       </main>
 
       {/* Footer */}
-      <footer className="bg-verde-oscuro text-white border-t border-verde-neon/30 py-6 text-center text-xs space-y-1">
+      <footer className="bg-verde-oscuro text-white border-t border-verde-neon/30 py-6 text-center text-xs space-y-1.5">
         <p className="font-bold tracking-wider text-verde-neon">
           INNOVATECH © 2026 - INSTITUCIÓN EDUCATIVA TÉCNICA PÉREZ Y ALDANA
         </p>
         <p className="text-gray-400">
-          Proyecto de Desarrollo Web para Grado 11 - Patrón de Diseño MVC, PHP & MySQL
+          Proyecto de Desarrollo Web para Grado 11 - Patrón de Diseño MVC, PHP, MySQL & Firebase Cloud Firestore
         </p>
+        <div className="flex items-center justify-center gap-2 pt-1">
+          <span className="inline-flex items-center gap-1.5 bg-black/40 text-emerald-300 border border-emerald-500/30 px-2.5 py-0.5 rounded-full text-[11px] font-mono">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            Firebase Firestore Cloud Database Activa
+          </span>
+        </div>
       </footer>
 
     </div>

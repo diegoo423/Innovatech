@@ -135,10 +135,16 @@ export const PhpMvcExporter: React.FC = () => {
                 }`}
               >
                 <div className="flex items-center space-x-2 truncate pr-2">
-                  <FileCode className="w-4 h-4 shrink-0 text-emerald-600" />
+                  {file.category === 'docs' ? (
+                    <BookOpen className="w-4 h-4 shrink-0 text-amber-500" />
+                  ) : (
+                    <FileCode className="w-4 h-4 shrink-0 text-emerald-600" />
+                  )}
                   <span className="truncate">{file.filename}</span>
                 </div>
-                <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-black/10 font-sans">
+                <span className={`text-[9px] uppercase px-1.5 py-0.5 rounded font-sans ${
+                  file.category === 'docs' ? 'bg-amber-100 text-amber-800 font-bold' : 'bg-black/10'
+                }`}>
                   {file.category}
                 </span>
               </button>
