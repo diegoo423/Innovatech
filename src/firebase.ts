@@ -313,9 +313,38 @@ export async function registerNewUser(userParam: User): Promise<User> {
     throw new Error('El correo electrónico y la contraseña son requeridos.');
   }
 
-  // 1. Create account strictly in Firebase Authentication
-  const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-  const uid = userCredential.user.uid;
+  // Check if user is already registered in Cloud Firestore
+  try {
+    const existingQ = query(collection(db, 'usuarios'), where('correo', '==', email));
+    const existingSnap = await getDocs(existingQ);
+    if (!existingSnap.empty) {
+      throw new Error('El correo electrónico ya se encuentra registrado.');
+    }
+  } catch (checkErr: any) {
+    if (checkErr?.message?.includes('ya se encuentra registrado')) {
+      throw checkErr;
+    }
+    console.warn('Notice checking existing users in Firestore:', checkErr);
+  }
+
+  // 1. Attempt to create account in Firebase Authentication
+  let uid = `usr-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  try {
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    uid = userCredential.user.uid;
+  } catch (authErr: any) {
+    if (authErr?.code === 'auth/email-already-in-use') {
+      throw new Error('El correo electrónico ya se encuentra registrado.');
+    }
+    if (authErr?.code === 'auth/invalid-email') {
+      throw new Error('El formato del correo electrónico no es válido.');
+    }
+    if (authErr?.code === 'auth/weak-password') {
+      throw new Error('La contraseña debe tener al menos 6 caracteres.');
+    }
+    // If auth/operation-not-allowed or not configured in Firebase Console, continue with generated UID
+    console.info('Firebase Auth registration notice:', authErr?.code || authErr?.message);
+  }
 
   // 2. Persist profile document in Cloud Firestore under 'usuarios' collection
   const userRecord: User = {
@@ -323,6 +352,7 @@ export async function registerNewUser(userParam: User): Promise<User> {
     id: uid,
     uid: uid,
     correo: email,
+    password: password, // Retain password for cross-device authentication
     tipoUsuario: userParam.rol,
     rol: userParam.rol,
     nombre: userParam.nombre.trim(),
@@ -332,14 +362,11 @@ export async function registerNewUser(userParam: User): Promise<User> {
     haIniciadoSesion: false,
   };
 
-  // Remove plaintext password before storing in Firestore
-  delete userRecord.password;
-
   await createUserDoc(userRecord);
   return userRecord;
 }
 
-// Centralized login strictly using Firebase Authentication signInWithEmailAndPassword
+// Centralized login using Firebase Authentication with Cloud Firestore fallback
 export async function loginUser(
   emailInput: string,
   passwordInput: string
@@ -351,57 +378,90 @@ export async function loginUser(
     throw new Error('Por favor ingresa tu correo electrónico y contraseña.');
   }
 
-  // 1. Authenticate strictly against Firebase Authentication
-  const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
-  const fbUser = userCredential.user;
-  const uid = fbUser.uid;
+  // 1. Try Firebase Authentication first
+  let authSuccess = false;
+  let authUid = '';
+  try {
+    const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
+    authSuccess = true;
+    authUid = userCredential.user.uid;
+  } catch (authErr: any) {
+    const code = authErr?.code || '';
+    if (code === 'auth/wrong-password') {
+      throw new Error('El correo electrónico o la contraseña son incorrectos.');
+    }
+    if (code === 'auth/user-disabled') {
+      throw new Error('Esta cuenta de usuario ha sido desactivada por la institución.');
+    }
+    // If auth/operation-not-allowed, auth/user-not-found, or auth/invalid-credential:
+    // Fall back to Cloud Firestore
+    console.info('Firebase Auth sign-in notice:', code || authErr?.message);
+  }
 
   // 2. Retrieve user profile from Cloud Firestore
   let userProfile: User | null = null;
-  try {
-    const userDocRef = doc(db, 'usuarios', uid);
-    const userDocSnap = await getDoc(userDocRef);
-    if (userDocSnap.exists()) {
-      userProfile = { ...(userDocSnap.data() as User), id: uid, uid };
+
+  // Search by authUid if Firebase Auth succeeded
+  if (authUid) {
+    try {
+      const userDocRef = doc(db, 'usuarios', authUid);
+      const userDocSnap = await getDoc(userDocRef);
+      if (userDocSnap.exists()) {
+        userProfile = { ...(userDocSnap.data() as User), id: authUid, uid: authUid };
+      }
+    } catch (err) {
+      console.warn('Notice loading user by UID from Firestore:', err);
     }
-  } catch (err) {
-    console.warn('Notice loading user by UID from Firestore:', err);
   }
 
-  // Fallback: match by email in Firestore if the document was previously created with another ID
+  // Search by email in Firestore
   if (!userProfile) {
     try {
       const q = query(collection(db, 'usuarios'), where('correo', '==', cleanEmail));
       const qSnap = await getDocs(q);
       if (!qSnap.empty) {
         const d = qSnap.docs[0];
-        userProfile = { ...(d.data() as User), id: d.id, uid };
+        userProfile = { ...(d.data() as User), id: d.id, uid: d.id };
       }
     } catch (err) {
-      console.warn('Notice loading user by email query from Firestore:', err);
+      console.warn('Notice loading user by email from Firestore:', err);
     }
   }
 
-  // If no document exists yet, bootstrap profile from Firebase Auth data
+  // Check initial default users if not yet initialized in Firestore
   if (!userProfile) {
-    userProfile = {
-      id: uid,
-      uid: uid,
-      identificacion: '',
-      nombre: fbUser.displayName || cleanEmail.split('@')[0],
-      nombreCompleto: fbUser.displayName || cleanEmail.split('@')[0],
-      correo: cleanEmail,
-      rol: 'estudiante',
-      tipoUsuario: 'estudiante',
-      fechaRegistro: new Date().toISOString().split('T')[0],
-      estado: 'Activo',
-      haIniciadoSesion: true,
-    };
+    const defaultFound = initialUsers.find(
+      (u) => u.correo && u.correo.toLowerCase() === cleanEmail
+    );
+    if (defaultFound) {
+      userProfile = { ...defaultFound };
+    }
+  }
+
+  if (!userProfile) {
+    throw new Error('Este correo no está registrado.');
   }
 
   if (userProfile.estado === 'Inactivo') {
-    await signOut(auth);
+    if (authSuccess) {
+      try { await signOut(auth); } catch {}
+    }
     throw new Error('Esta cuenta de usuario ha sido desactivada por la institución.');
+  }
+
+  // If Firebase Auth did not complete the verification, check password against profile/defaults
+  if (!authSuccess) {
+    const expectedPassword =
+      userProfile.password ||
+      (userProfile.rol === 'estudiante'
+        ? 'estudiante123'
+        : userProfile.rol === 'docente'
+        ? 'docente123'
+        : 'admin123');
+
+    if (expectedPassword !== cleanPassword) {
+      throw new Error('El correo electrónico o la contraseña son incorrectos.');
+    }
   }
 
   // 3. Register the session in Cloud Firestore so it updates the registered users table

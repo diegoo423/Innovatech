@@ -45,12 +45,11 @@ service cloud.firestore {
     }
 
     function isValidUser(data) {
-      return (data.identificacion == null || (data.identificacion is string && data.identificacion.size() <= 64)) &&
-             (data.uid == null || (data.uid is string && data.uid.size() <= 128)) &&
-             (data.nombre is string || data.nombreCompleto is string) &&
+      return (data.nombre is string || data.nombreCompleto is string) &&
              (data.correo is string || data.email is string) &&
-             (data.rol == 'estudiante' || data.rol == 'docente' || data.rol == 'administrador' ||
-              data.tipoUsuario == 'estudiante' || data.tipoUsuario == 'docente' || data.tipoUsuario == 'administrador');
+             (!('identificacion' in data) || (data.identificacion is string && data.identificacion.size() <= 64)) &&
+             (!('uid' in data) || (data.uid is string && data.uid.size() <= 128)) &&
+             (!('rol' in data) || data.rol == 'estudiante' || data.rol == 'docente' || data.rol == 'administrador');
     }
 
     // Colección de Pupitres Dañados

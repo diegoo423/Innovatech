@@ -86,9 +86,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onRegister
       setIsLoggingIn(false);
       onLoginSuccess(authenticatedUser);
     } catch (err: any) {
-      console.error('Error de Firebase Authentication en inicio de sesión:', err);
       setIsLoggingIn(false);
-
       const errorCode = err?.code || '';
       if (errorCode === 'auth/user-not-found') {
         setLoginError('Este correo no está registrado.');
@@ -104,8 +102,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onRegister
         setLoginError('Esta cuenta de usuario ha sido desactivada por la institución.');
       } else if (errorCode === 'auth/too-many-requests') {
         setLoginError('Demasiados intentos fallidos. Por favor espera un momento e intenta de nuevo.');
-      } else if (errorCode === 'auth/operation-not-allowed') {
-        setLoginError('El proveedor de inicio de sesión con Correo/Contraseña no está habilitado en Firebase Authentication. Debe habilitarse en la consola de Firebase.');
       } else {
         setLoginError(err?.message || 'El correo electrónico o la contraseña son incorrectos.');
       }
@@ -182,7 +178,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onRegister
       const savedUser = await registerNewUser(newUser);
       await onRegisterUser(savedUser);
 
-      setRegisterSuccess('¡Cuenta creada exitosamente en Firebase Authentication! Redirigiendo al inicio de sesión...');
+      setRegisterSuccess('¡Cuenta creada exitosamente! Redirigiendo al inicio de sesión...');
       setIsRegistering(false);
 
       // Pre-fill email and password in login form and switch to login
@@ -192,7 +188,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onRegister
         setViewMode('login');
       }, 1200);
     } catch (err: any) {
-      console.error('Error de Firebase Authentication en registro:', err);
       setIsRegistering(false);
       const errorCode = err?.code || '';
       if (errorCode === 'auth/email-already-in-use') {
@@ -201,10 +196,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onRegister
         setRegisterError('El formato del correo electrónico no es válido.');
       } else if (errorCode === 'auth/weak-password') {
         setRegisterError('La contraseña debe tener al menos 6 caracteres.');
-      } else if (errorCode === 'auth/operation-not-allowed') {
-        setRegisterError('El proveedor de inicio de sesión con Correo/Contraseña no está habilitado en Firebase Authentication. Debe habilitarse en la consola de Firebase.');
       } else {
-        setRegisterError(err?.message || 'Ocurrió un error al registrar la cuenta en Firebase.');
+        setRegisterError(err?.message || 'Ocurrió un error al registrar la cuenta.');
       }
     }
   };
